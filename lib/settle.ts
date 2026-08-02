@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { DbEvent } from "@/lib/events";
+import { DbEvent, formatTaipei } from "@/lib/events";
+import { pushToPlayers } from "@/lib/push";
 
 /**
  * 成行／流局判定：把所有已到 confirm_deadline 的 open 賽事結算掉。
@@ -28,7 +29,23 @@ export async function settleDueEvents(
     const to = (count ?? 0) >= event.min_required ? "confirmed" : "void";
     await db.from("events").update({ status: to }).eq("id", event.id);
     results.push({ id: event.id, title: event.title, to });
-    // TODO(M5)：LINE 推播「確定開打」／「流局通知」
+
+    // LINE 推播成團／流局通知（沒設 token 時自動略過）
+    const { data: regs } = await db
+      .from("registrations")
+      .select("player_id")
+      .eq("event_id", event.id)
+      .in("status", ["ok", "waitlist"])
+      .returns<Array<{ player_id: string }>>();
+    const playerIds = (regs ?? []).map((r) => r.player_id);
+    const when = formatTaipei(event.starts_at);
+    await pushToPlayers(
+      db,
+      playerIds,
+      to === "confirmed"
+        ? `🎉【${event.title}】人數達標，確定開打！\n🗓 ${when}\n📍 ${event.venue}\n記得帶陀螺與發射器，到場出示報到 QR Code。`
+        : `😢【${event.title}】報名人數未達成團門檻，本場流局。\n所有人的信譽不受影響，期待下一場再集結！`
+    );
   }
   return results;
 }

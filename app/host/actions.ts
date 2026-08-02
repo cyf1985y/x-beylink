@@ -12,6 +12,15 @@ import {
   isTier,
   bannedUntilFor,
 } from "@/lib/events";
+import { pushToPlayers } from "@/lib/push";
+
+const RANK_TEXT: Record<number, string> = {
+  1: "冠軍 🥇",
+  2: "亞軍 🥈",
+  3: "季軍 🥉",
+  4: "殿軍 🎖️",
+  8: "八強 🎗️",
+};
 
 export type CheckinResult = {
   ok: boolean;
@@ -269,7 +278,7 @@ export async function settleEvent(
   }
   if (!usedTop.has(1)) return { ok: false, error: "至少要選出冠軍（第 1 名）" };
 
-  // 寫入名次與獎盃
+  // 寫入名次與獎盃（＋推播獎盃通知）
   for (const reg of okRegs) {
     const rank = ranks.get(reg.id);
     if (!rank) continue;
@@ -284,6 +293,11 @@ export async function settleEvent(
       rank,
       issued_by: event.organizer_id,
     });
+    await pushToPlayers(
+      db,
+      [reg.player_id],
+      `🏆 恭喜！你的選手在【${event.title}】拿下${TIERS[event.tier].label}${RANK_TEXT[rank] ?? `第 ${rank} 名`}！\n獎盃已放進選手卡的獎盃牆。`
+    );
   }
 
   // 出席數與缺席記點：ok 名單全員 total+1；已報到 ok+1；未報到記 1 點並檢查停權

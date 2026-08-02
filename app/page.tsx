@@ -129,6 +129,12 @@ export default async function HomePage() {
           );
         })}
       </section>
+
+      <footer className="mt-10 text-center text-xs text-slate-600">
+        <Link href="/terms" className="hover:text-slate-400">
+          服務條款與隱私說明
+        </Link>
+      </footer>
     </main>
   );
 }

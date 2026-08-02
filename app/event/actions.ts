@@ -8,8 +8,10 @@ import {
   DbRegistration,
   FREE_CANCEL_HOURS,
   bannedUntilFor,
+  formatTaipei,
   isPlayerBanned,
 } from "@/lib/events";
+import { pushToPlayers } from "@/lib/push";
 
 export type ActionResult = { ok: boolean; error?: string; message?: string };
 
@@ -159,18 +161,23 @@ export async function cancelRegistration(
     penaltyNote = `（距開賽不到 ${FREE_CANCEL_HOURS} 小時，已記 0.5 點信譽點數）`;
   }
 
-  // 自動遞補：候補最早的一位轉正取。M5 再接 LINE 推播通知。
+  // 自動遞補：候補最早的一位轉正取，並推播通知
   if (wasOk) {
     const { data: next } = await db
       .from("registrations")
-      .select("id")
+      .select("id,player_id")
       .eq("event_id", reg.event_id)
       .eq("status", "waitlist")
       .order("created_at", { ascending: true })
       .limit(1)
-      .maybeSingle<{ id: string }>();
+      .maybeSingle<{ id: string; player_id: string }>();
     if (next) {
       await db.from("registrations").update({ status: "ok" }).eq("id", next.id);
+      await pushToPlayers(
+        db,
+        [next.player_id],
+        `🎊 候補遞補成功！你的選手已正式報上【${event.title}】\n🗓 ${formatTaipei(event.starts_at)}\n📍 ${event.venue}\n請到賽事頁查看報到 QR Code。`
+      );
     }
   }
 
