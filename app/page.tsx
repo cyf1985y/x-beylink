@@ -51,12 +51,20 @@ export default async function HomePage() {
           </p>
         </div>
         {session ? (
-          <Link
-            href="/me"
-            className="rounded-xl border border-arena-line px-3 py-2 text-sm text-cyanx hover:border-cyanx"
-          >
-            我的選手
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/host"
+              className="rounded-xl border border-arena-line px-3 py-2 text-sm text-slate-400 hover:border-cyanx hover:text-cyanx"
+            >
+              主辦
+            </Link>
+            <Link
+              href="/me"
+              className="rounded-xl border border-arena-line px-3 py-2 text-sm text-cyanx hover:border-cyanx"
+            >
+              我的選手
+            </Link>
+          </div>
         ) : (
           <Link
             href="/login"

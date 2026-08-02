@@ -67,7 +67,15 @@ function PlayerRow({
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold">{p.nickname}</p>
           {p.regStatus === "ok" && (
-            <p className="text-xs text-emerald-300">✅ 已報名</p>
+            <p className="text-xs text-emerald-300">
+              ✅ 已報名 ·{" "}
+              <a
+                href={`/ticket/${p.registrationId}`}
+                className="underline hover:text-emerald-200"
+              >
+                報到憑證
+              </a>
+            </p>
           )}
           {p.regStatus === "waitlist" && (
             <p className="text-xs text-gold">⏳ 候補中</p>
