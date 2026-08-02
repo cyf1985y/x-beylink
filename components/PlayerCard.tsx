@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormState } from "react-dom";
 import { deletePlayer, type ActionResult } from "@/app/me/actions";
 import type { DbPlayer } from "@/lib/supabase";
+import { Flash } from "@/components/Flash";
 
 const initialState: ActionResult = { ok: false };
 
@@ -77,11 +78,9 @@ export function PlayerCard({ player }: { player: DbPlayer }) {
         </div>
       </div>
 
-      {deleteState.error && (
-        <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {deleteState.error}
-        </p>
-      )}
+      <div className="mt-3 empty:mt-0">
+        <Flash state={deleteState} />
+      </div>
     </div>
   );
 }

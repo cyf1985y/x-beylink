@@ -6,6 +6,7 @@ import {
   cancelRegistration,
   type ActionResult,
 } from "@/app/event/actions";
+import { Flash } from "@/components/Flash";
 
 const initialState: ActionResult = { ok: false };
 
@@ -99,16 +100,9 @@ function PlayerRow({
           </form>
         )}
       </div>
-      {state.error && (
-        <p className="mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-300">
-          {state.error}
-        </p>
-      )}
-      {state.ok && state.message && (
-        <p className="mt-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
-          {state.message}
-        </p>
-      )}
+      <div className="mt-2 empty:mt-0">
+        <Flash state={state} />
+      </div>
     </div>
   );
 }

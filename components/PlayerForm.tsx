@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { useEffect, useRef } from "react";
 import { createPlayer, type ActionResult } from "@/app/me/actions";
 import { AVATARS, TAIWAN_CITIES } from "@/lib/moderation";
+import { Flash } from "@/components/Flash";
 
 const initialState: ActionResult = { ok: false };
 
@@ -151,11 +152,7 @@ export function NewPlayerForm() {
         ⚠️ 選手資料建立後<b>不可修改</b>（比賽現場以此認定本人）。若尚未報名任何賽事，可刪除重建。
       </p>
 
-      {state.error && (
-        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {state.error}
-        </p>
-      )}
+      <Flash state={state} successText="選手檔案建立成功！" />
       <SubmitButton label="建立選手檔案" />
     </form>
   );
