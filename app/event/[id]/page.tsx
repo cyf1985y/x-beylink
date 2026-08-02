@@ -129,6 +129,13 @@ export default async function EventPage({
         </div>
       </div>
 
+      <Link
+        href={`/event/${event.id}/bracket`}
+        className="mt-4 block rounded-2xl border border-violetx/40 bg-violetx/10 p-3 text-center text-sm font-bold text-violetx transition hover:bg-violetx/20"
+      >
+        ⚔️ 看對戰表（比賽日即時晉級圖）→
+      </Link>
+
       <section className="mt-6">
         <h2 className="text-lg font-bold text-cyanx">我要報名</h2>
         <div className="mt-3">

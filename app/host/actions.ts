@@ -13,6 +13,13 @@ import {
   bannedUntilFor,
 } from "@/lib/events";
 import { pushToPlayers } from "@/lib/push";
+import {
+  buildBracket,
+  loadMatches,
+  applyWinner,
+  undoWinner,
+  deriveRanks,
+} from "@/lib/bracket";
 
 const RANK_TEXT: Record<number, string> = {
   1: "冠軍 🥇",
@@ -278,6 +285,23 @@ export async function settleEvent(
   }
   if (!usedTop.has(1)) return { ok: false, error: "至少要選出冠軍（第 1 名）" };
 
+  const err = await performSettlement(event, okRegs, ranks);
+  if (err) return { ok: false, error: err };
+
+  revalidatePath(`/host/event/${eventId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** 結算核心：寫名次與獎盃、出席與缺席記點、賽事結束、主辦場次 +1 */
+async function performSettlement(
+  event: DbEvent,
+  okRegs: DbRegistration[],
+  ranks: Map<string, number> // regId -> rank
+): Promise<string | null> {
+  const db = supabaseAdmin();
+  const eventId = event.id;
+
   // 寫入名次與獎盃（＋推播獎盃通知）
   for (const reg of okRegs) {
     const rank = ranks.get(reg.id);
@@ -335,9 +359,7 @@ export async function settleEvent(
     .update({ events_held: (org?.events_held ?? 0) + 1 })
     .eq("id", event.organizer_id);
 
-  revalidatePath(`/host/event/${eventId}`);
-  revalidatePath("/");
-  return { ok: true };
+  return null;
 }
 
 /** 撤回獎盃（誤發 48 小時內可撤回，僅發放的主辦方） */
@@ -376,5 +398,144 @@ export async function revokeTrophy(
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", trophyId);
   revalidatePath(`/host/event/${trophy.event_id}`);
+  return { ok: true };
+}
+
+/* ---------- 對戰表 ---------- */
+
+/** 產生對戰表：從已報到選手隨機配對（單淘汰＋季軍戰＋輪空自動晉級） */
+export async function generateBracket(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const eventId = String(formData.get("event_id") ?? "");
+  const owner = await requireEventOwner(eventId);
+  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+  const event = owner.event;
+  if (event.status !== "open" && event.status !== "confirmed") {
+    return { ok: false, error: "此賽事狀態不能開賽" };
+  }
+
+  const db = supabaseAdmin();
+  const { count: existing } = await db
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+  if ((existing ?? 0) > 0) {
+    return { ok: false, error: "對戰表已產生過了" };
+  }
+
+  const { data: regs } = await db
+    .from("registrations")
+    .select("player_id")
+    .eq("event_id", eventId)
+    .eq("status", "ok")
+    .not("checked_in_at", "is", null)
+    .returns<Array<{ player_id: string }>>();
+  const playerIds = (regs ?? []).map((r) => r.player_id);
+  if (playerIds.length < 2) {
+    return { ok: false, error: "至少要 2 位已報到選手才能產生對戰表" };
+  }
+
+  const rows = buildBracket(eventId, playerIds);
+  const { error } = await db.from("matches").insert(rows);
+  if (error) return { ok: false, error: "產生對戰表失敗，請重試" };
+
+  revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath(`/host/event/${eventId}`);
+  revalidatePath(`/event/${eventId}/bracket`);
+  return { ok: true };
+}
+
+/** 回報單場勝負（點選勝者） */
+export async function reportWinner(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const eventId = String(formData.get("event_id") ?? "");
+  const matchId = String(formData.get("match_id") ?? "");
+  const winnerId = String(formData.get("winner_id") ?? "");
+  const owner = await requireEventOwner(eventId);
+  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+
+  const db = supabaseAdmin();
+  const matches = await loadMatches(db, eventId);
+  const match = matches.find((m) => m.id === matchId);
+  if (!match) return { ok: false, error: "找不到這場對戰" };
+  if (match.winner_id) return { ok: false, error: "本場已有結果（可先撤銷）" };
+
+  const err = await applyWinner(db, matches, match, winnerId);
+  if (err) return { ok: false, error: err };
+
+  revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath(`/event/${eventId}/bracket`);
+  return { ok: true };
+}
+
+/** 撤銷單場勝負 */
+export async function undoMatch(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const eventId = String(formData.get("event_id") ?? "");
+  const matchId = String(formData.get("match_id") ?? "");
+  const owner = await requireEventOwner(eventId);
+  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+
+  const db = supabaseAdmin();
+  const matches = await loadMatches(db, eventId);
+  const match = matches.find((m) => m.id === matchId);
+  if (!match) return { ok: false, error: "找不到這場對戰" };
+
+  const err = await undoWinner(db, matches, match);
+  if (err) return { ok: false, error: err };
+
+  revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath(`/event/${eventId}/bracket`);
+  return { ok: true };
+}
+
+/** 依對戰表結果一鍵結算發獎 */
+export async function settleFromBracket(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const eventId = String(formData.get("event_id") ?? "");
+  const owner = await requireEventOwner(eventId);
+  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+  const event = owner.event;
+  if (event.status === "done") return { ok: false, error: "此賽事已結算過了" };
+  if (event.status !== "open" && event.status !== "confirmed") {
+    return { ok: false, error: "流局或已取消的賽事不能結算" };
+  }
+
+  const db = supabaseAdmin();
+  const matches = await loadMatches(db, eventId);
+  if (matches.length === 0) return { ok: false, error: "還沒有對戰表" };
+  const playerRanks = deriveRanks(matches);
+  if (!playerRanks) {
+    return { ok: false, error: "對戰表還沒打完（決賽或季軍戰未有結果）" };
+  }
+
+  const { data: regs } = await db
+    .from("registrations")
+    .select("*")
+    .eq("event_id", eventId)
+    .eq("status", "ok")
+    .returns<DbRegistration[]>();
+  const okRegs = regs ?? [];
+
+  const ranks = new Map<string, number>(); // regId -> rank
+  for (const reg of okRegs) {
+    const r = playerRanks.get(reg.player_id);
+    if (r) ranks.set(reg.id, r);
+  }
+
+  const err = await performSettlement(event, okRegs, ranks);
+  if (err) return { ok: false, error: err };
+
+  revalidatePath(`/host/event/${eventId}`);
+  revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath("/");
   return { ok: true };
 }

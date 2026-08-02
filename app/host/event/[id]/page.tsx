@@ -121,6 +121,13 @@ export default async function HostEventPage({
         <CheckinScanner eventId={event.id} />
       </div>
 
+      <Link
+        href={`/host/event/${event.id}/bracket`}
+        className="mt-3 block rounded-2xl border border-violetx/40 bg-violetx/10 p-4 text-center font-bold text-violetx transition hover:bg-violetx/20"
+      >
+        ⚔️ 對戰表（產生賽程／記錄勝負／依結果結算）→
+      </Link>
+
       <section className="mt-6">
         <h2 className="font-bold text-slate-200">報名名單（{okRows.length}）</h2>
         <div className="mt-2">
