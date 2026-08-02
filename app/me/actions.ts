@@ -45,6 +45,17 @@ export async function createPlayer(
   if (!isValidAvatar(avatar)) return { ok: false, error: "頭像不正確" };
 
   const db = supabaseAdmin();
+
+  // 暱稱全平台不可重複（比賽現場認定本人的依據）
+  const { data: sameName } = await db
+    .from("players")
+    .select("id")
+    .eq("nickname", nickname)
+    .maybeSingle();
+  if (sameName) {
+    return { ok: false, error: "這個暱稱已經有人使用了，請換一個" };
+  }
+
   const { data: existing } = await db
     .from("players")
     .select("id,role")
@@ -69,7 +80,13 @@ export async function createPlayer(
     team_name: teamName || null,
     avatar,
   });
-  if (error) return { ok: false, error: "建立失敗，請稍後再試" };
+  if (error) {
+    // unique index 攔截同時送出的重複暱稱
+    if (error.code === "23505") {
+      return { ok: false, error: "這個暱稱已經有人使用了，請換一個" };
+    }
+    return { ok: false, error: "建立失敗，請稍後再試" };
+  }
 
   revalidatePath("/me");
   return { ok: true };
