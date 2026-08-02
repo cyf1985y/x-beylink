@@ -59,7 +59,15 @@ export default async function HostPage() {
           </span>
         )}
       </h1>
-      <p className="mt-1 text-sm text-slate-400">我的賽事</p>
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-sm text-slate-400">我的賽事</p>
+        <Link
+          href="/host/new"
+          className="rounded-xl bg-cyanx px-4 py-2 text-sm font-bold text-arena hover:brightness-110"
+        >
+          ＋ 開新賽事
+        </Link>
+      </div>
 
       <section className="mt-5 space-y-3">
         {(events ?? []).length === 0 && (

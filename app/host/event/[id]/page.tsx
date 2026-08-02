@@ -12,6 +12,12 @@ import {
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 import { CheckinScanner } from "@/components/CheckinScanner";
 import { HostRoster, type RosterRow } from "@/components/HostRoster";
+import {
+  SettlePanel,
+  TrophyList,
+  type SettleRow,
+  type IssuedTrophy,
+} from "@/components/SettlePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +69,33 @@ export default async function HostEventPage({
   const waitRows = rows.filter((r) => r.status === "waitlist");
   const checkedIn = okRows.filter((r) => r.checkedInAt).length;
 
+  let trophies: IssuedTrophy[] = [];
+  if (event.status === "done") {
+    const { data: rawTrophies } = await db
+      .from("trophies")
+      .select("id,player_id,rank,issued_at,revoked_at")
+      .eq("event_id", event.id)
+      .order("rank", { ascending: true })
+      .returns<
+        Array<{
+          id: string;
+          player_id: string;
+          rank: number;
+          issued_at: string;
+          revoked_at: string | null;
+        }>
+      >();
+    trophies = (rawTrophies ?? []).map((t) => ({
+      trophyId: t.id,
+      nickname: playerMap.get(t.player_id)?.nickname ?? "選手",
+      rank: t.rank,
+      revoked: !!t.revoked_at,
+      canRevoke:
+        !t.revoked_at &&
+        Date.now() - new Date(t.issued_at).getTime() <= 48 * 3600_000,
+    }));
+  }
+
   return (
     <main className="mx-auto max-w-md px-4 py-8">
       <Link href="/host" className="text-sm text-slate-400 hover:text-slate-200">
@@ -106,6 +139,41 @@ export default async function HostEventPage({
           <h2 className="font-bold text-slate-200">候補名單（{waitRows.length}）</h2>
           <div className="mt-2">
             <HostRoster eventId={event.id} rows={waitRows} />
+          </div>
+        </section>
+      )}
+
+      {(event.status === "open" || event.status === "confirmed") &&
+        okRows.length > 0 && (
+          <section className="mt-8">
+            <h2 className="font-bold text-gold">🏆 結算發獎</h2>
+            <div className="mt-2 rounded-2xl border border-gold/30 bg-arena-card p-4">
+              <SettlePanel
+                eventId={event.id}
+                rows={okRows.map(
+                  (r): SettleRow => ({
+                    regId: r.regId,
+                    nickname: r.nickname,
+                    avatar: r.avatar,
+                    checkedIn: !!r.checkedInAt,
+                  })
+                )}
+              />
+            </div>
+          </section>
+        )}
+
+      {event.status === "done" && (
+        <section className="mt-8">
+          <h2 className="font-bold text-gold">🏆 已發放獎盃</h2>
+          <div className="mt-2">
+            {trophies.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-arena-line p-4 text-center text-sm text-slate-500">
+                本場沒有發放獎盃
+              </p>
+            ) : (
+              <TrophyList trophies={trophies} />
+            )}
           </div>
         </section>
       )}

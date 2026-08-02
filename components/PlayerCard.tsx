@@ -39,7 +39,13 @@ export function PlayerCard({ player }: { player: DbPlayer }) {
             {player.birth_year} 年出生
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            出席 {attendanceText}｜信譽點數 {Number(player.penalty_points)}
+            出席 {attendanceText}｜信譽點數 {Number(player.penalty_points)}｜
+            <a
+              href={`/player/${player.id}`}
+              className="text-cyanx hover:underline"
+            >
+              選手卡
+            </a>
           </p>
         </div>
         <div className="flex flex-col gap-1 text-right text-sm">
