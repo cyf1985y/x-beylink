@@ -35,6 +35,17 @@ export default async function EventPage({
 
   const session = await getSession();
 
+  const { data: organizer } = await db
+    .from("organizers")
+    .select("name,verified,score,events_held")
+    .eq("id", event.organizer_id)
+    .single<{
+      name: string;
+      verified: boolean;
+      score: number;
+      events_held: number;
+    }>();
+
   const { data: regs } = await db
     .from("registrations")
     .select("*")
@@ -130,6 +141,36 @@ export default async function EventPage({
           </p>
         </div>
       </div>
+
+      {organizer && (
+        <div className="card-x mt-4 flex items-center gap-3 p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-arena-line bg-arena text-xl">
+            🏟️
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-bold">
+              {organizer.name}
+              {organizer.verified && (
+                <span className="ml-1.5 text-xs font-normal text-cyanx">
+                  ✓ 平台認證
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-slate-500">主辦方</p>
+          </div>
+          <div className="text-right">
+            <p className="font-num text-lg font-bold text-gold">
+              {organizer.score}
+              <span className="ml-0.5 text-[10px] font-normal text-slate-500">
+                積分
+              </span>
+            </p>
+            <p className="text-xs text-slate-500">
+              辦過 {organizer.events_held} 場
+            </p>
+          </div>
+        </div>
+      )}
 
       <Link
         href={`/event/${event.id}/bracket`}

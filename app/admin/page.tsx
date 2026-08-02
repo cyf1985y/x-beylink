@@ -65,7 +65,7 @@ export default async function AdminPage() {
                   <span className="text-xs text-cyanx">
                     🏟 {org.name}
                     {org.verified && " ✓"}｜{TIERS[org.tier_allowed as Tier].label}
-                    ｜辦過 {org.events_held} 場
+                    ｜{org.events_held} 場｜{org.score} 分
                   </span>
                 ) : (
                   <span className="text-xs text-slate-500">一般帳號</span>
@@ -76,6 +76,7 @@ export default async function AdminPage() {
                   organizerId={org.id}
                   verified={org.verified}
                   tierAllowed={org.tier_allowed as Tier}
+                  score={org.score}
                 />
               ) : (
                 <CreateOrganizerForm

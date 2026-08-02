@@ -59,10 +59,12 @@ export function EditOrganizerForm({
   organizerId,
   verified,
   tierAllowed,
+  score,
 }: {
   organizerId: string;
   verified: boolean;
   tierAllowed: Tier;
+  score: number;
 }) {
   const [state, formAction] = useFormState(updateOrganizer, initialState);
   return (
@@ -85,10 +87,20 @@ export function EditOrganizerForm({
         >
           {(Object.keys(TIERS) as Tier[]).map((t) => (
             <option key={t} value={t}>
-              可開到{TIERS[t].label}
+              認證後可開到{TIERS[t].label}
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-1.5 text-sm text-slate-300">
+          積分
+          <input
+            type="number"
+            name="score"
+            defaultValue={score}
+            min={0}
+            className="w-20 rounded-lg border border-arena-line bg-arena px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-gold"
+          />
+        </label>
         <Submit label="儲存" />
       </div>
       <Msg state={state} />

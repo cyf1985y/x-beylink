@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
-import { getOrganizerForUser, DbOrganizer } from "@/lib/organizer";
+import {
+  getOrganizerForUser,
+  effectiveTierAllowed,
+  DbOrganizer,
+  TIER_SCORE,
+} from "@/lib/organizer";
 import {
   DbEvent,
   DbRegistration,
@@ -189,10 +194,11 @@ export async function createEvent(
 
   const title = String(formData.get("title") ?? "").trim();
   const tier = String(formData.get("tier") ?? "");
-  const startsAtRaw = String(formData.get("starts_at") ?? "");
+  const startsDate = String(formData.get("starts_date") ?? "");
+  const startsTime = String(formData.get("starts_time") ?? "");
   const venue = String(formData.get("venue") ?? "").trim();
   const region = String(formData.get("region") ?? "宜蘭").trim();
-  const division = String(formData.get("division") ?? "通常組");
+  const division = String(formData.get("division") ?? "");
   const capacity = Number(formData.get("capacity"));
   const rulesNote = String(formData.get("rules_note") ?? "").trim();
 
@@ -200,23 +206,31 @@ export async function createEvent(
     return { ok: false, error: "賽事名稱請填 2–40 字" };
   }
   if (!isTier(tier)) return { ok: false, error: "等級不正確" };
-  if (TIER_ORDER[tier] > TIER_ORDER[organizer.tier_allowed]) {
+
+  // 升級規則：未認證銅級起步、辦滿 3 場解鎖銀級；認證後依平台核定（可金級）
+  const allowed = effectiveTierAllowed(organizer);
+  if (TIER_ORDER[tier] > TIER_ORDER[allowed]) {
     return {
       ok: false,
-      error: `你目前可開的最高等級是${TIERS[organizer.tier_allowed].label}`,
+      error: organizer.verified
+        ? `你目前核定可開的最高等級是${TIERS[allowed].label}`
+        : `未認證主辦方目前可開到${TIERS[allowed].label}——多辦幾場累積紀錄，或聯絡平台申請認證`,
     };
   }
   const minRequired = TIERS[tier].minRequired;
 
-  // datetime-local 送來的是台灣當地時間（無時區），轉為 UTC 儲存
-  const startsAt = new Date(`${startsAtRaw}:00+08:00`);
+  // 日期＋時間（台灣時區）轉 UTC 儲存
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startsDate) || !/^\d{2}:\d{2}$/.test(startsTime)) {
+    return { ok: false, error: "請選擇開賽日期與時間" };
+  }
+  const startsAt = new Date(`${startsDate}T${startsTime}:00+08:00`);
   if (isNaN(startsAt.getTime())) return { ok: false, error: "開賽時間格式不正確" };
   if (startsAt.getTime() < Date.now() + 3600_000) {
     return { ok: false, error: "開賽時間至少要在 1 小時之後" };
   }
   if (!venue) return { ok: false, error: "請填場地" };
-  if (!["通常組", "公開組", "親子組"].includes(division)) {
-    return { ok: false, error: "組別不正確" };
+  if (!["幼兒／國小組", "國中／高中組", "成人組", "其他"].includes(division)) {
+    return { ok: false, error: "請選擇組別" };
   }
   if (!Number.isInteger(capacity) || capacity < minRequired || capacity > 128) {
     return {
@@ -378,15 +392,18 @@ async function performSettlement(
 
   await db.from("events").update({ status: "done" }).eq("id", eventId);
 
-  // 主辦方辦賽場次 +1
+  // 主辦方辦賽場次 +1、積分依等級累加（銅 +1／銀 +3／金 +8）
   const { data: org } = await db
     .from("organizers")
-    .select("events_held")
+    .select("events_held,score")
     .eq("id", event.organizer_id)
-    .single<{ events_held: number }>();
+    .single<{ events_held: number; score: number }>();
   await db
     .from("organizers")
-    .update({ events_held: (org?.events_held ?? 0) + 1 })
+    .update({
+      events_held: (org?.events_held ?? 0) + 1,
+      score: (org?.score ?? 0) + TIER_SCORE[event.tier],
+    })
     .eq("id", event.organizer_id);
 
   return null;

@@ -57,14 +57,18 @@ export async function updateOrganizer(
   const organizerId = String(formData.get("organizer_id") ?? "");
   const verified = formData.get("verified") === "on";
   const tierAllowed = String(formData.get("tier_allowed") ?? "bronze");
+  const score = Number(formData.get("score"));
   if (!["bronze", "silver", "gold"].includes(tierAllowed)) {
     return { ok: false, error: "等級不正確" };
+  }
+  if (!Number.isInteger(score) || score < 0 || score > 100000) {
+    return { ok: false, error: "積分需為 0 以上的整數" };
   }
 
   const db = supabaseAdmin();
   const { error } = await db
     .from("organizers")
-    .update({ verified, tier_allowed: tierAllowed })
+    .update({ verified, tier_allowed: tierAllowed, score })
     .eq("id", organizerId);
   if (error) return { ok: false, error: "更新失敗" };
   revalidatePath("/admin");

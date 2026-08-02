@@ -2,7 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
-import { getOrganizerForUser } from "@/lib/organizer";
+import {
+  getOrganizerForUser,
+  effectiveTierAllowed,
+  SILVER_UNLOCK_EVENTS,
+} from "@/lib/organizer";
 import { DbEvent, EVENT_STATUS_LABEL, formatTaipei, TIERS } from "@/lib/events";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 
@@ -47,7 +51,7 @@ export default async function HostPage() {
           ← 首頁
         </Link>
         <span className="text-xs text-slate-500">
-          可開等級：{TIERS[organizer.tier_allowed].label}以下
+          可開等級：{TIERS[effectiveTierAllowed(organizer)].label}以下
         </span>
       </header>
 
@@ -59,6 +63,16 @@ export default async function HostPage() {
           </span>
         )}
       </h1>
+      <p className="mt-1.5 text-sm text-slate-400">
+        主辦積分 <span className="font-num font-bold text-gold">{organizer.score}</span>
+        ｜辦過 <span className="font-num font-bold text-cyanx">{organizer.events_held}</span> 場
+        {!organizer.verified &&
+          organizer.events_held < SILVER_UNLOCK_EVENTS && (
+            <span className="ml-1 text-xs text-slate-500">
+              （再辦 {SILVER_UNLOCK_EVENTS - organizer.events_held} 場解鎖銀級，或申請平台認證）
+            </span>
+          )}
+      </p>
       <div className="mt-3 flex items-center justify-between">
         <p className="text-sm text-slate-400">我的賽事</p>
         <Link

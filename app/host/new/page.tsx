@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
-import { getOrganizerForUser } from "@/lib/organizer";
+import { getOrganizerForUser, effectiveTierAllowed } from "@/lib/organizer";
 import { NewEventForm } from "@/components/NewEventForm";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +19,8 @@ export default async function NewEventPage() {
         ← 我的賽事
       </Link>
       <h1 className="mt-4 text-2xl font-black">🏁 開一場新賽事</h1>
-      <div className="mt-4 rounded-2xl border border-arena-line bg-arena-card p-5">
-        <NewEventForm tierAllowed={organizer.tier_allowed} />
+      <div className="card-x mt-4 p-5">
+        <NewEventForm tierAllowed={effectiveTierAllowed(organizer)} />
       </div>
     </main>
   );
