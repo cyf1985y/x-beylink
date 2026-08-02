@@ -40,6 +40,11 @@ npx tsc --noEmit   # 型別檢查
 ## 目前狀態
 
 - 原型：index.html（GitHub Pages 展示用，正式開發不共用程式碼，僅作 UI 參考）
-- 開發階段：Phase 1 M1 已實作 —— LINE Login（手刻 OAuth，`app/api/auth/`）、session（jose JWT cookie，`lib/session.ts`）、選手檔案管理（`/me`，server actions 在 `app/me/actions.ts`）、敏感詞檢查（`lib/moderation.ts`）
+- 開發階段：Phase 1（M1–M5）全部實作完成
+  - M1 LINE Login（手刻 OAuth，`app/api/auth/`）＋ session（jose JWT cookie）＋ `/me` 選手檔案（敏感詞檢查 `lib/moderation.ts`）
+  - M2 賽事列表／詳情、報名／取消／候補遞補（`app/event/actions.ts`）、流局判定（`lib/settle.ts`＋每日 cron＋頁面載入補跑）
+  - M3 QR 報到：`/ticket/[regId]` 憑證、`/host/event/[id]` 掃碼（jsQR）＋手動報到
+  - M4 `/host/new` 開賽表單（等級受 tier_allowed 限制）、結算發獎盃＋缺席記點、`/player/[id]` 選手卡
+  - M5 LINE 推播（`lib/push.ts`，成團/流局/遞補/獎盃/賽前提醒）、`/admin` 平台管理（ADMIN_LINE_USER_IDS）、`/terms`
 - 資料庫存取：自訂 LINE 登入（非 Supabase Auth），所有讀寫皆走伺服器端 service role client（`lib/supabase.ts`），擁有權檢查在程式碼層執行；RLS 已開啟擋 anon 直連
-- 下一步：M2 賽事與報名（列表＋詳情＋報名／取消／候補＋流局 cron）
+- 下一步：Phase 2（抽籤制、自動組隊、對戰表／計分板、成就徽章、分享海報）
