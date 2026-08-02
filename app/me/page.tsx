@@ -53,12 +53,21 @@ export default async function MePage() {
         ))}
       </section>
 
-      <section className="mt-8">
-        <h2 className="h-x">新增選手</h2>
-        <div className="card-x mt-3 p-5">
-          <NewPlayerForm />
-        </div>
-      </section>
+      {(() => {
+        const roles = new Set((players ?? []).map((p) => p.role));
+        const available = (["child", "parent"] as const).filter(
+          (r) => !roles.has(r)
+        );
+        if (available.length === 0) return null; // 兩位都建好 → 隱藏新增區塊
+        return (
+          <section className="mt-8">
+            <h2 className="h-x">新增選手</h2>
+            <div className="card-x mt-3 p-5">
+              <NewPlayerForm availableRoles={[...available]} />
+            </div>
+          </section>
+        );
+      })()}
     </main>
   );
 }

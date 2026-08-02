@@ -24,7 +24,11 @@ function SubmitButton({ label }: { label: string }) {
 const inputCls =
   "w-full rounded-lg border border-arena-line bg-arena px-3 py-2.5 text-slate-100 outline-none focus:border-cyanx";
 
-export function NewPlayerForm() {
+export function NewPlayerForm({
+  availableRoles,
+}: {
+  availableRoles: Array<"parent" | "child">;
+}) {
   const [state, formAction] = useFormState(createPlayer, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const currentYear = new Date().getFullYear();
@@ -34,32 +38,54 @@ export function NewPlayerForm() {
     if (state.ok) formRef.current?.reset();
   }, [state]);
 
+  const single = availableRoles.length === 1;
+
   return (
     <form ref={formRef} action={formAction} className="space-y-5">
       <div>
         <label className="mb-1.5 block text-sm font-bold text-slate-300">
           身分
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="cursor-pointer">
-            <input
-              type="radio"
-              name="role"
-              value="child"
-              defaultChecked
-              className="peer sr-only"
-            />
-            <span className="block rounded-xl border border-arena-line px-4 py-3 text-center font-bold text-slate-400 transition peer-checked:border-cyanx peer-checked:bg-cyanx/10 peer-checked:text-cyanx">
-              🧒 小孩
-            </span>
-          </label>
-          <label className="cursor-pointer">
-            <input type="radio" name="role" value="parent" className="peer sr-only" />
-            <span className="block rounded-xl border border-arena-line px-4 py-3 text-center font-bold text-slate-400 transition peer-checked:border-violetx peer-checked:bg-violetx/10 peer-checked:text-violetx">
-              🧑 家長
-            </span>
-          </label>
-        </div>
+        {single ? (
+          <>
+            <input type="hidden" name="role" value={availableRoles[0]} />
+            <div
+              className={`rounded-xl border px-4 py-3 text-center font-bold ${
+                availableRoles[0] === "parent"
+                  ? "border-violetx/60 bg-violetx/10 text-violetx"
+                  : "border-cyanx/60 bg-cyanx/10 text-cyanx"
+              }`}
+            >
+              {availableRoles[0] === "parent" ? "🧑 家長" : "🧒 小孩"}
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="cursor-pointer">
+              <input
+                type="radio"
+                name="role"
+                value="child"
+                defaultChecked
+                className="peer sr-only"
+              />
+              <span className="block rounded-xl border border-arena-line px-4 py-3 text-center font-bold text-slate-400 transition peer-checked:border-cyanx peer-checked:bg-cyanx/10 peer-checked:text-cyanx">
+                🧒 小孩
+              </span>
+            </label>
+            <label className="cursor-pointer">
+              <input
+                type="radio"
+                name="role"
+                value="parent"
+                className="peer sr-only"
+              />
+              <span className="block rounded-xl border border-arena-line px-4 py-3 text-center font-bold text-slate-400 transition peer-checked:border-violetx peer-checked:bg-violetx/10 peer-checked:text-violetx">
+                🧑 家長
+              </span>
+            </label>
+          </div>
+        )}
         <p className="mt-1 text-xs text-slate-500">
           每個帳號可建立家長、小孩各 1 位
         </p>
