@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>陀螺集結｜自動組隊報名平台 — 原型 v1</title>
+<style>
+:root{
+  --bg:#0b1026; --panel:#151b3a; --panel2:#1d2450; --line:#2a3266;
+  --txt:#eef1ff; --sub:#9aa3d0; --acc:#38e0ff; --acc2:#7c5cff;
+  --gold:#ffcf4d; --green:#3ddc84; --red:#ff5d7a; --org:#ffb14d;
+  --radius:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 600px at 50% -10%, #1a2158 0%, #0b1026 55%);
+  color:var(--txt);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  display:flex;justify-content:center;align-items:flex-start;
+  min-height:100vh;padding:18px 10px;
+}
+#frame{
+  width:100%;max-width:430px;height:calc(100vh - 36px);min-height:640px;
+  background:linear-gradient(180deg,#101636 0%,#0c1130 100%);
+  border:1px solid var(--line);border-radius:28px;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.55);
+  position:relative;
+}
+/* ---------- header ---------- */
+header{
+  padding:14px 16px 10px;display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--line);background:rgba(16,22,54,.9);
+}
+.logo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:17px;letter-spacing:1px}
+.logo .spin{width:26px;height:26px;border-radius:50%;
+  background:conic-gradient(from 0deg,var(--acc),var(--acc2),var(--acc));
+  display:inline-flex;align-items:center;justify-content:center;font-size:14px;
+  animation:spin 6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.logo small{font-size:10px;color:var(--sub);font-weight:500;display:block;letter-spacing:0}
+.roleSwitch{margin-left:auto;display:flex;background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:3px}
+.roleSwitch button{
+  border:0;background:transparent;color:var(--sub);font-size:12px;font-weight:700;
+  padding:6px 12px;border-radius:99px;cursor:pointer;font-family:inherit;
+}
+.roleSwitch button.on{background:linear-gradient(90deg,var(--acc),var(--acc2));color:#08102c}
+.roleSwitch button.onOrg{background:linear-gradient(90deg,var(--org),#ff7a4d);color:#2a1400}
+/* ---------- main ---------- */
+main{flex:1;overflow-y:auto;padding:14px 14px 90px;-webkit-overflow-scrolling:touch}
+main::-webkit-scrollbar{width:0}
+.hint{
+  font-size:11px;color:#08102c;background:var(--acc);border-radius:8px;
+  padding:2px 8px;font-weight:800;display:inline-block;vertical-align:2px
+}
+h2.section{font-size:15px;margin:6px 2px 10px;display:flex;align-items:center;gap:8px}
+h2.section .sub{font-size:11px;color:var(--sub);font-weight:400;margin-left:auto}
+/* ---------- cards ---------- */
+.card{
+  background:linear-gradient(180deg,var(--panel) 0%,#131a3e 100%);
+  border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;margin-bottom:12px;
+}
+.card.tap{cursor:pointer;transition:transform .12s, border-color .12s}
+.card.tap:active{transform:scale(.985)}
+.card.tap:hover{border-color:var(--acc)}
+.evTop{display:flex;gap:8px;align-items:flex-start}
+.evTitle{font-size:15px;font-weight:800;line-height:1.35}
+.evMeta{font-size:12px;color:var(--sub);margin-top:5px;line-height:1.7}
+.badge{
+  font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:99px;white-space:nowrap;
+  border:1px solid transparent;
+}
+.b-open{background:rgba(61,220,132,.15);color:var(--green);border-color:rgba(61,220,132,.4)}
+.b-lot{background:rgba(124,92,255,.18);color:#b9a5ff;border-color:rgba(124,92,255,.45)}
+.b-ok{background:rgba(56,224,255,.13);color:var(--acc);border-color:rgba(56,224,255,.4)}
+.b-full{background:rgba(255,93,122,.14);color:var(--red);border-color:rgba(255,93,122,.4)}
+.b-void{background:rgba(154,163,208,.14);color:var(--sub);border-color:rgba(154,163,208,.35)}
+.b-t-gold{background:rgba(255,207,77,.16);color:#ffd76e;border-color:rgba(255,207,77,.55)}
+.b-t-silver{background:rgba(205,215,235,.14);color:#dbe3f5;border-color:rgba(205,215,235,.5)}
+.b-t-bronze{background:rgba(214,138,64,.16);color:#eda76a;border-color:rgba(214,138,64,.55)}
+.tro.t-gold{border-color:rgba(255,207,77,.6)}
+.tro.t-silver{border-color:rgba(205,215,235,.55)}
+.tro.t-bronze{border-color:rgba(214,138,64,.6)}
+.progress{height:7px;background:#0a0f28;border-radius:99px;margin-top:10px;overflow:hidden}
+.progress i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+.progress i.warn{background:linear-gradient(90deg,#ffb14d,#ff7a4d)}
+.progLabel{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-top:5px}
+.orgLine{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--sub);margin-top:8px}
+.orgLine .star{color:var(--gold)}
+.verified{color:var(--acc);font-weight:700}
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:0;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;
+  padding:12px 16px;font-family:inherit;transition:filter .15s,transform .1s;
+}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(90deg,var(--acc),var(--acc2));color:#08102c;width:100%}
+.btn.gold{background:linear-gradient(90deg,#ffcf4d,#ff9f3d);color:#3a2500;width:100%}
+.btn.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line);width:100%}
+.btn.small{padding:8px 12px;font-size:12px;border-radius:10px;width:auto}
+.btn.danger{background:rgba(255,93,122,.15);color:var(--red);border:1px solid rgba(255,93,122,.4)}
+.btn.org{background:linear-gradient(90deg,var(--org),#ff7a4d);color:#2a1400;width:100%}
+.btn:disabled{filter:grayscale(.8) brightness(.6);cursor:not-allowed}
+.row{display:flex;gap:8px}
+.row .btn{flex:1}
+/* ---------- back bar ---------- */
+.backbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.backbar button{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+  border-radius:10px;padding:6px 10px;cursor:pointer;font-family:inherit;font-size:13px}
+.backbar span{font-weight:800;font-size:14px}
+/* ---------- detail blocks ---------- */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;margin-top:8px}
+.kv b{color:var(--sub);font-weight:600;white-space:nowrap}
+.ruleBox{background:#0a0f28;border:1px dashed var(--line);border-radius:12px;padding:10px 12px;
+  font-size:12px;color:var(--sub);line-height:1.8;margin-top:10px}
+.notice{background:rgba(56,224,255,.08);border:1px solid rgba(56,224,255,.3);
+  border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.7;margin:10px 0}
+.notice.purple{background:rgba(124,92,255,.1);border-color:rgba(124,92,255,.35)}
+.notice.warn{background:rgba(255,177,77,.09);border-color:rgba(255,177,77,.35)}
+/* ---------- players ---------- */
+.pRow{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);
+  border-radius:12px;margin-top:8px;cursor:pointer;background:var(--panel2)}
+.pRow.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:20px;background:radial-gradient(circle at 30% 30%,#2c3aa0,#141a44);flex:none;border:1px solid var(--line)}
+.avatar.big{width:64px;height:64px;font-size:32px}
+.pInfo{flex:1;min-width:0}
+.pName{font-weight:800;font-size:14px}
+.pSub{font-size:11px;color:var(--sub);margin-top:2px}
+.attTag{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:99px}
+.att-hi{background:rgba(61,220,132,.15);color:var(--green)}
+.att-mid{background:rgba(255,207,77,.15);color:var(--gold)}
+.att-new{background:rgba(154,163,208,.15);color:var(--sub)}
+/* ---------- tabbar ---------- */
+nav#tabbar{
+  position:absolute;bottom:0;left:0;right:0;display:flex;
+  background:rgba(13,18,44,.96);border-top:1px solid var(--line);
+  padding:8px 6px calc(10px + env(safe-area-inset-bottom));backdrop-filter:blur(8px)
+}
+nav#tabbar button{
+  flex:1;background:transparent;border:0;color:var(--sub);font-family:inherit;cursor:pointer;
+  font-size:10.5px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+nav#tabbar button .ic{font-size:19px;line-height:1}
+nav#tabbar button.on{color:var(--acc)}
+nav#tabbar button.onOrg{color:var(--org)}
+/* ---------- modal ---------- */
+#modal-root{position:fixed;inset:0;display:none;align-items:flex-end;justify-content:center;z-index:50}
+#modal-root.show{display:flex}
+#modal-root .dim{position:absolute;inset:0;background:rgba(4,7,20,.7);backdrop-filter:blur(3px)}
+.sheet{
+  position:relative;width:100%;max-width:430px;max-height:86vh;overflow-y:auto;
+  background:linear-gradient(180deg,#1a2150,#12183c);border:1px solid var(--line);
+  border-radius:24px 24px 0 0;padding:18px 18px 26px;animation:up .22s ease;
+}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sheet h3{font-size:16px;margin-bottom:4px}
+.sheet .sub{font-size:12px;color:var(--sub);line-height:1.7}
+.grab{width:44px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 12px}
+/* ---------- OTP ---------- */
+.otpBoxes{display:flex;gap:8px;justify-content:center;margin:16px 0}
+.otpBoxes input{width:52px;height:56px;text-align:center;font-size:24px;font-weight:800;
+  background:#0a0f28;border:1px solid var(--line);border-radius:12px;color:var(--txt);font-family:inherit}
+.otpBoxes input:focus{outline:none;border-color:var(--acc)}
+.phoneInput{width:100%;background:#0a0f28;border:1px solid var(--line);border-radius:12px;
+  color:var(--txt);font-size:16px;padding:12px;font-family:inherit;margin-top:10px}
+.phoneInput:focus{outline:none;border-color:var(--acc)}
+/* ---------- QR ---------- */
+.qrWrap{display:flex;flex-direction:column;align-items:center;padding:8px 0 4px}
+.qr{width:150px;height:150px;border-radius:12px;background:#fff;padding:10px;margin:10px 0}
+.qr .grid{width:100%;height:100%;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);gap:2px}
+.qr .grid i{background:#0b1026;border-radius:1px}
+.qr .grid i.w{background:transparent}
+/* ---------- hero card ---------- */
+.hero{
+  border-radius:20px;padding:18px 16px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,#25307c 0%,#3a1d7a 55%,#1b2154 100%);
+  border:1px solid #4a55b0;box-shadow:0 12px 40px rgba(40,30,120,.45);
+}
+.hero:before{content:"";position:absolute;inset:0;
+  background:radial-gradient(400px 180px at 85% -20%,rgba(56,224,255,.35),transparent 60%);}
+.hero .shine{position:absolute;top:0;bottom:0;width:60px;background:linear-gradient(105deg,transparent,rgba(255,255,255,.16),transparent);
+  animation:shine 3.4s ease-in-out infinite;left:-80px}
+@keyframes shine{0%{left:-80px}55%{left:120%}100%{left:120%}}
+.heroTop{display:flex;gap:12px;align-items:center;position:relative}
+.heroName{font-size:19px;font-weight:900;letter-spacing:1px}
+.heroTeam{font-size:11.5px;color:#bcc6ff;margin-top:3px}
+.heroHonor{margin-left:auto;text-align:center;font-size:10px;color:#bcc6ff}
+.heroHonor .shield{font-size:26px;display:block}
+.heroStats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;position:relative}
+.hs{background:rgba(8,12,34,.55);border:1px solid rgba(120,130,220,.35);border-radius:12px;padding:8px 4px;text-align:center}
+.hs b{font-size:17px;display:block}
+.hs span{font-size:10px;color:#aab4e8}
+.wallTitle{display:flex;align-items:center;margin:16px 2px 8px;font-size:13.5px;font-weight:800}
+.wallTitle small{margin-left:auto;font-weight:400;color:var(--sub);font-size:11px}
+.badgeGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tro{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 8px;text-align:center;cursor:pointer}
+.tro:hover{border-color:var(--gold)}
+.tro .ic{font-size:26px}
+.tro .nm{font-size:11px;font-weight:800;margin-top:5px;line-height:1.4}
+.tro .dt{font-size:9.5px;color:var(--sub);margin-top:2px;line-height:1.4}
+.tro.locked{opacity:.38;filter:grayscale(1);cursor:default}
+.tro.new{border-color:var(--gold);box-shadow:0 0 14px rgba(255,207,77,.25)}
+/* ---------- poster ---------- */
+.poster{
+  border-radius:18px;overflow:hidden;border:1px solid #4a55b0;margin:12px 0;
+  background:linear-gradient(160deg,#1b2470 0%,#4a1d86 60%,#131a44 100%);padding:22px 16px;text-align:center;position:relative}
+.poster:before{content:"";position:absolute;inset:0;background:radial-gradient(300px 160px at 50% 0%,rgba(255,207,77,.25),transparent 70%)}
+.poster .cup{font-size:52px;position:relative}
+.poster h4{font-size:19px;margin-top:6px;position:relative;letter-spacing:1px}
+.poster .evn{font-size:12px;color:#cfd6ff;margin-top:6px;position:relative;line-height:1.7}
+.poster .stats{display:flex;justify-content:center;gap:14px;margin-top:12px;position:relative;font-size:11px;color:#aab4e8}
+.poster .stats b{color:#fff;font-size:14px;display:block;text-align:center}
+.poster .brand{margin-top:16px;font-size:10px;color:#8f9ae0;position:relative;display:flex;align-items:center;justify-content:center;gap:6px}
+.poster .miniqr{width:26px;height:26px;background:#fff;border-radius:4px;display:inline-block;position:relative}
+/* ---------- bracket ---------- */
+.bracket{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}
+.round{flex:none;width:150px;display:flex;flex-direction:column;justify-content:space-around;gap:10px}
+.roundTitle{font-size:11px;color:var(--sub);text-align:center;font-weight:700;margin-bottom:2px}
+.match{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:12px}
+.match.live{border-color:var(--acc);box-shadow:0 0 12px rgba(56,224,255,.25)}
+.match.done{opacity:.85}
+.mrow{display:flex;align-items:center;gap:6px;padding:7px 9px}
+.mrow+.mrow{border-top:1px solid var(--line)}
+.mrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow.win .nm{color:var(--green);font-weight:800}
+.mrow.lose{opacity:.45;text-decoration:line-through}
+.mrow .sc{font-weight:800}
+.stadiumTag{font-size:10px;background:rgba(56,224,255,.12);color:var(--acc);padding:2px 6px;text-align:center;font-weight:700}
+.callBox{background:rgba(56,224,255,.08);border:1px solid rgba(56,224,255,.35);border-radius:14px;padding:12px;margin-bottom:12px;font-size:13px;line-height:1.8}
+/* ---------- judge ---------- */
+.judgeMatch{background:var(--panel);border:1px solid var(--org);border-radius:16px;padding:16px;text-align:center}
+.vs{display:flex;align-items:center;gap:10px;justify-content:center;margin:12px 0}
+.vs .fighter{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px 6px;cursor:pointer}
+.vs .fighter:hover{border-color:var(--org)}
+.vs .fighter.picked{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
+.vs .fighter .em{font-size:30px}
+.vs .fighter .nm{font-weight:800;font-size:13px;margin-top:4px}
+.vs .x{font-weight:900;color:var(--org);font-size:16px}
+/* ---------- org list ---------- */
+.checkRow{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:12px;margin-top:8px;background:var(--panel2)}
+.checkRow .st{margin-left:auto;font-size:11px;font-weight:800}
+.st.ok{color:var(--green)} .st.no{color:var(--sub)}
+.rankRow{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:12px;margin-top:8px;background:var(--panel2)}
+.rankRow .medal{font-size:22px}
+.rankRow .who{flex:1;font-weight:800;font-size:13.5px}
+.rankRow .cup{font-size:11px;color:var(--gold)}
+/* ---------- form ---------- */
+.f label{display:block;font-size:12px;color:var(--sub);margin:12px 0 5px;font-weight:700}
+.f input[type=text],.f input[type=number],.f select,.f input[type=date],.f input[type=time]{
+  width:100%;background:#0a0f28;border:1px solid var(--line);border-radius:11px;color:var(--txt);
+  font-size:14px;padding:11px;font-family:inherit}
+.f input:focus,.f select:focus{outline:none;border-color:var(--org)}
+.segment{display:flex;background:#0a0f28;border:1px solid var(--line);border-radius:11px;padding:3px}
+.segment button{flex:1;border:0;background:transparent;color:var(--sub);font-family:inherit;font-weight:700;
+  font-size:12.5px;padding:9px 4px;border-radius:9px;cursor:pointer}
+.segment button.on{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+.btn.line{background:#06C755;color:#fff;width:100%}
+.lineIc{background:#fff;color:#06C755;font-size:10px;font-weight:900;border-radius:5px;padding:2px 5px;letter-spacing:.5px}
+.scLabel{font-size:11.5px;color:var(--sub);font-weight:700;text-align:left;margin:10px 0 5px;display:flex;align-items:center}
+.minus{margin-left:auto;background:rgba(255,93,122,.13);color:var(--red);border:1px solid rgba(255,93,122,.4);
+  border-radius:9px;font-family:inherit;font-weight:800;font-size:11px;padding:5px 10px;cursor:pointer}
+.minus:disabled{opacity:.35;cursor:not-allowed}
+.sc3{flex-direction:column;gap:2px;white-space:nowrap;padding:8px 4px}
+.sc3 small{font-size:9.5px;color:var(--sub);font-weight:600}
+/* ---------- scoreboard ---------- */
+#board{position:absolute;inset:0;z-index:40;background:#04060e;display:none;flex-direction:column}
+#board.show{display:flex}
+.bd-top{display:flex;align-items:center;padding:10px 14px;color:var(--sub);font-size:12px;font-weight:700}
+.bd-top .exit{margin-left:auto;background:var(--panel);border:1px solid var(--line);color:var(--txt);
+  border-radius:10px;padding:7px 12px;font-family:inherit;font-size:12px;cursor:pointer;font-weight:700}
+.bd-score{flex:1;display:flex;min-height:0}
+.bd-side{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative}
+.bd-side.blue{background:linear-gradient(180deg,rgba(43,108,255,.22),rgba(43,108,255,.05))}
+.bd-side.red{background:linear-gradient(180deg,rgba(255,64,90,.22),rgba(255,64,90,.05))}
+.bd-side .who{font-size:15px;font-weight:900;display:flex;align-items:center;gap:6px}
+.bd-side.blue .who{color:#7fa8ff}.bd-side.red .who{color:#ff8ba0}
+.bd-side .num{font-size:min(30vw,130px);font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.bd-side.blue .num{color:#5b8dff;text-shadow:0 0 40px rgba(43,108,255,.5)}
+.bd-side.red .num{color:#ff5d7a;text-shadow:0 0 40px rgba(255,64,90,.5)}
+.bd-colon{display:flex;align-items:center;font-size:min(14vw,60px);font-weight:900;color:#39406e}
+.bd-target{position:absolute;bottom:8px;font-size:10.5px;color:var(--sub)}
+.bd-btns{display:flex;gap:8px;padding:10px}
+.bd-col{flex:1;display:flex;flex-direction:column;gap:8px}
+.bd-btn{border:0;border-radius:14px;font-family:inherit;font-weight:900;cursor:pointer;
+  padding:14px 4px;font-size:20px;line-height:1.1;color:#fff}
+.bd-btn small{display:block;font-size:10.5px;font-weight:700;opacity:.85;margin-top:3px}
+.bd-btn.blue{background:linear-gradient(180deg,#2b6cff,#1c47b8)}
+.bd-btn.red{background:linear-gradient(180deg,#ff405a,#c02040)}
+.bd-btn:active{filter:brightness(1.25)}
+.bd-undo{margin:0 10px 12px;background:#1a2150;border:1px solid var(--line);color:var(--txt);
+  border-radius:14px;padding:13px;font-family:inherit;font-weight:900;font-size:15px;cursor:pointer}
+.bd-undo:disabled{opacity:.35}
+/* winner overlay */
+#winScr{position:absolute;inset:0;z-index:45;display:none;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:10px;padding:24px}
+#winScr.show{display:flex}
+#winScr.blue{background:radial-gradient(600px 400px at 50% 30%,#2b6cff55,#04060e 75%);animation:flashB .6s ease 4}
+#winScr.red{background:radial-gradient(600px 400px at 50% 30%,#ff405a55,#04060e 75%);animation:flashR .6s ease 4}
+@keyframes flashB{0%,100%{background-color:#04060e}50%{background-color:#12275e}}
+@keyframes flashR{0%,100%{background-color:#04060e}50%{background-color:#4e1220}}
+#winScr .em{font-size:72px;animation:pop .5s ease}
+@keyframes pop{from{transform:scale(.3)}60%{transform:scale(1.15)}to{transform:scale(1)}}
+#winScr h2{font-size:30px;font-weight:900;letter-spacing:2px}
+#winScr .fin{font-size:14px;color:var(--sub);font-weight:700}
+#winScr .cd{font-size:12px;color:var(--sub);margin-top:8px}
+#winScr .row{width:100%;max-width:320px;margin-top:10px}
+/* ---------- toast ---------- */
+#toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%) translateY(20px);
+  background:#e8ecff;color:#0b1026;font-size:13px;font-weight:800;padding:11px 18px;border-radius:99px;
+  opacity:0;pointer-events:none;transition:all .25s;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:90%;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* ---------- misc ---------- */
+.empty{color:var(--sub);font-size:13px;text-align:center;padding:40px 10px;line-height:2}
+.divider{height:1px;background:var(--line);margin:14px 0}
+.step{display:flex;gap:10px;margin-top:12px;font-size:12.5px;line-height:1.7}
+.step .no{flex:none;width:22px;height:22px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--acc)}
+.lotBig{font-size:40px;text-align:center;margin:8px 0}
+.confetti{text-align:center;font-size:22px;letter-spacing:6px}
+</style>
+</head>
+<body>
+<div id="frame">
+  <header>
+    <div class="logo"><span class="spin">🌀</span><span>陀螺集結<small>宜蘭試點 BETA</small></span></div>
+    <div class="roleSwitch">
+      <button id="rolePlayer" class="on" onclick="setRole('player')">玩家端</button>
+      <button id="roleOrg" onclick="setRole('org')">主辦方端</button>
+    </div>
+  </header>
+  <main id="screen"></main>
+  <nav id="tabbar"></nav>
+  <div id="board"></div>
+  <div id="winScr"></div>
+</div>
+<div id="modal-root"><div class="dim" onclick="closeModal()"></div><div class="sheet" id="sheet"></div></div>
+<script>/* board & winner overlays are injected into #frame by JS */</script>
+<div id="toast"></div>
+<script>
+/* ================= STATE ================= */
+const S = {
+  role:'player',
+  tab:'events',        // player: events | team | bracket | card
+  orgTab:'manage',     // org: manage | checkin | judge | settle
+  detail:null,         // event id in detail view
+  phoneVerified:false,
+  selectedPlayer:'p1',
+  cardPlayer:'p1',
+  regs:{},             // eventId -> {playerId, status:'ok'|'wait'}
+  lottery:'open',      // e3: open | registered | drawn | confirmed
+  team:{state:'none', confirms:[false,false,false]}, // e2 三人團體戰
+  newTrophy:false,
+};
+const PLAYERS = [
+  {id:'p1', em:'🌀', name:'小宇', age:8, att:96, games:12, honor:'黃金盾', honorIc:'🛡️', cls:'att-hi'},
+  {id:'p2', em:'⚡', name:'小安', age:6, att:100, games:2, honor:'新星', honorIc:'✨', cls:'att-new'},
+  {id:'p3', em:'🔥', name:'TOM（本人）', age:41, att:88, games:5, honor:'白銀盾', honorIc:'🛡', cls:'att-mid'},
+];
+const TIER_INFO = {
+  gold:{nm:'🥇 金級', desc:'每月舉辦・32 人成團'},
+  silver:{nm:'🥈 銀級', desc:'每週舉辦・16 人成團'},
+  bronze:{nm:'🥉 銅級', desc:'每天都有・8 人成團'},
+};
+const EVENTS = [
+  {id:'e1', title:'羅東玩具窟 每日銅賽・8/16 午場', g:'銅級', t:'bronze', mode:'fcfs', date:'8/16（日）13:00',
+   venue:'羅東玩具窟（羅東鎮公正路 88 號）', div:'個人賽・通常組（6–12 歲）', cap:16, now:14,
+   deposit:0, min:8, status:'confirmed', org:'羅東玩具窟', orgStar:4.8, orgN:12, ontime:'100%',
+   rule:'官方第 12 版規則｜自備 3 顆正版陀螺，零件不可重複｜禁用：巫師幻杖、烈鯊鱗甲'},
+  {id:'e2', title:'宜蘭陀螺基地 週賽・第 34 週', g:'銀級', t:'silver', mode:'fcfs', date:'8/23（日）14:00',
+   venue:'宜蘭陀螺基地（宜蘭市中山路 210 號）', div:'個人賽・公開組（6 歲以上）', cap:32, now:19,
+   deposit:50, min:16, status:'confirmed', org:'宜蘭陀螺基地', orgStar:4.6, orgN:11, ontime:'100%',
+   rule:'官方第 12 版規則｜押金 NT$50 到場折抵'},
+  {id:'e3', title:'蘭陽金盃賽・8月場（抽籤）', g:'金級', t:'gold', mode:'lottery', date:'8/30（日）10:00',
+   venue:'宜蘭運動公園體育館', div:'個人賽・通常組＋公開組', cap:48, now:61, unit:'人已登記',
+   deposit:100, min:32, status:'lottery', org:'蘭陽陀螺聯盟', orgStar:4.9, orgN:20, ontime:'95%',
+   lotClose:'8/10（一）12:00', rule:'官方第 12 版規則｜每月一場・全宜蘭當月唯一金級冠軍盃｜新手保障名額 20%｜押金 NT$100 到場全額退還'},
+  {id:'e4', title:'頭城親子陀螺同樂會', g:'銅級', t:'bronze', mode:'fcfs', date:'8/9（六）15:00',
+   venue:'頭城鎮親子館', div:'個人賽・親子組', cap:24, now:5,
+   deposit:0, min:8, status:'gathering', org:'頭城親子館', orgStar:4.2, orgN:3, ontime:'100%',
+   rule:'娛樂賽，不限型號，家長可陪同上場'},
+];
+const TROPHIES = [
+  {ic:'🏆', nm:'銅級冠軍盃', dt:'2026/07 羅東玩具窟 每日銅賽', tier:'bronze', got:true},
+  {ic:'🥈', nm:'金級亞軍盃', dt:'2026/06 蘭陽夏季盃', tier:'gold', got:true},
+  {ic:'🔥', nm:'3 連勝', dt:'2026/07 達成', got:true},
+  {ic:'🐣', nm:'首勝達成', dt:'2026/03 達成', got:true},
+  {ic:'⚔️', nm:'百戰勇士', dt:'參賽 12/10 場・已達成', got:true},
+  {ic:'🤝', nm:'最佳隊友', dt:'團體戰全勤＋隊友好評', got:false},
+];
+const ev = id => EVENTS.find(e=>e.id===id);
+const player = id => PLAYERS.find(p=>p.id===id);
+
+/* ================= UTIL ================= */
+const $ = s => document.querySelector(s);
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2400); }
+function openModal(html){ $('#sheet').innerHTML='<div class="grab"></div>'+html; $('#modal-root').classList.add('show'); }
+function closeModal(){ $('#modal-root').classList.remove('show'); }
+function qrHTML(){ let cells=''; for(let i=0;i<81;i++){ const on=(i*7+i%5+((i/9)|0)*3)%3!==0; cells+=`<i class="${on?'':'w'}"></i>`;}
+  return `<div class="qr"><div class="grid">${cells}</div></div>`; }
+function attTag(p){ return `<span class="attTag ${p.cls}">${p.games<3?'新手':'到場率 '+p.att+'%'}</span>`; }
+
+/* ================= RENDER ROOT ================= */
+function setRole(r){ S.role=r; S.detail=null;
+  $('#rolePlayer').className = r==='player'?'on':'';
+  $('#roleOrg').className = r==='org'?'onOrg':'';
+  render(); }
+function setTab(t){ if(S.role==='player') S.tab=t; else S.orgTab=t; S.detail=null; render(); }
+function render(){
+  renderTabbar();
+  const m=$('#screen'); m.scrollTop=0;
+  if(S.role==='player'){
+    if(S.detail) return m.innerHTML=vDetail(S.detail);
+    m.innerHTML = {events:vEvents, team:vTeam, bracket:vBracket, card:vCard}[S.tab]();
+  }else{
+    m.innerHTML = {manage:vOrgManage, checkin:vOrgCheckin, judge:vOrgJudge, settle:vOrgSettle}[S.orgTab]();
+  }
+}
+function renderTabbar(){
+  const tabs = S.role==='player'
+    ? [['events','🏟️','賽事'],['team','🤝','組隊'],['bracket','⚔️','對戰表'],['card','🎴','選手卡']]
+    : [['manage','📋','賽事管理'],['checkin','📷','掃碼報到'],['judge','⚖️','裁判模式'],['settle','🏆','結算發獎']];
+  const cur = S.role==='player'?S.tab:S.orgTab;
+  $('#tabbar').innerHTML = tabs.map(([id,ic,nm])=>
+    `<button class="${cur===id?(S.role==='player'?'on':'onOrg'):''}" onclick="setTab('${id}')">
+       <span class="ic">${ic}</span>${nm}</button>`).join('');
+}
+
+/* ================= PLAYER: EVENTS ================= */
+function statusBadge(e){
+  if(e.id==='e3'&&S.lottery!=='open'){
+    if(S.lottery==='registered') return '<span class="badge b-lot">已登記抽籤</span>';
+    if(S.lottery==='drawn') return '<span class="badge b-ok">中籤待確認</span>';
+    return '<span class="badge b-ok">已報名 ✓</span>';
+  }
+  if(S.regs[e.id]) return '<span class="badge b-ok">已報名 ✓</span>';
+  return {open:'<span class="badge b-open">報名中</span>',
+    confirmed:'<span class="badge b-open">報名中</span>',
+    lottery:'<span class="badge b-lot">抽籤登記中</span>',
+    gathering:'<span class="badge b-open">報名中</span>',
+    full:'<span class="badge b-full">已額滿・候補</span>'}[e.status];
+}
+function confirmBadge(e){
+  if(e.status==='confirmed') return '<span class="badge b-ok">✓ 已確認成行</span>';
+  if(e.status==='gathering') return `<span class="badge b-void">成行門檻 ${e.now}/${e.min}</span>`;
+  return '';
+}
+function vEvents(){
+  return `<h2 class="section">🏟️ 宜蘭賽事 <span class="sub">📍 目前開放：宜蘭地區</span></h2>` +
+  EVENTS.map(e=>{
+    const reg = e.id==='e3' ? Math.min(e.now/e.cap,1)*100 : (e.now/e.cap)*100;
+    const warn = e.status==='gathering';
+    return `<div class="card tap" onclick="S.detail='${e.id}';render()">
+      <div class="evTop">
+        <div style="flex:1">
+          <div class="evTitle">${e.title}</div>
+          <div class="evMeta">📅 ${e.date}<br>📍 ${e.venue}<br>🎯 ${e.div}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+          <span class="badge b-t-${e.t}">${TIER_INFO[e.t].nm}</span>${statusBadge(e)}${confirmBadge(e)}
+        </div>
+      </div>
+      <div class="progress"><i class="${warn?'warn':''}" style="width:${reg}%"></i></div>
+      <div class="progLabel">
+        <span>${e.mode==='lottery' ? `已登記 ${e.now} 人・名額 ${e.cap}｜⏳ ${e.lotClose} 截止` : `${e.now}/${e.cap} ${e.unit||'名'}`}</span>
+        <span>${e.deposit? '押金 NT$'+e.deposit : '免費'}</span>
+      </div>
+      <div class="orgLine">🏪 ${e.org} <span class="verified">✓ 認證主辦</span>
+        <span style="margin-left:auto"><span class="star">★</span> ${e.orgStar}｜準時率 ${e.ontime}｜辦過 ${e.orgN} 場</span></div>
+    </div>`;
+  }).join('') + `
+  <div class="card" style="padding:11px 13px">
+    <div style="font-size:12px;font-weight:800;margin-bottom:7px">🏅 平台賽事分級（由平台核定，非主辦方自選）</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${Object.entries(TIER_INFO).map(([k,v])=>`<span class="badge b-t-${k}">${v.nm}｜${v.desc}</span>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px;line-height:1.7">獎盃對應相同等級，成團門檻由等級固定（銅 8／銀 16／金 32）。銅盃天天有、銀盃一週一座、金盃一個月只誕生一座。店家累積場次與信譽即可升級開賽資格。</div>
+  </div>`;
+}
+
+/* ================= PLAYER: DETAIL ================= */
+function vDetail(id){
+  const e=ev(id);
+  let cta='';
+  if(e.mode==='lottery'){
+    if(S.lottery==='open') cta=`<button class="btn primary" onclick="startSignup('${e.id}')">🎲 登記抽籤（免搶名額）</button>
+      <div class="notice purple">此賽事為<b>登記抽籤制</b>：${e.lotClose} 前登記皆有效，不比手速。截止後系統抽籤，中籤以 LINE 通知，24 小時內確認即完成報名。新手保障名額 20%。</div>`;
+    else if(S.lottery==='registered') cta=`<button class="btn ghost" disabled>已登記，等待 ${e.lotClose} 開獎</button>
+      <button class="btn gold" style="margin-top:8px" onclick="drawLottery()">🎲 模擬開獎 <span class="hint">DEMO</span></button>`;
+    else if(S.lottery==='drawn') cta=`<div class="notice"><b>🎉 恭喜中籤！</b>請於 24 小時內確認並繳交押金 NT$100（到場全額退還），逾時視同放棄並自動遞補。</div>
+      <button class="btn primary" onclick="confirmLottery()">確認參賽並繳押金（LINE Pay）</button>`;
+    else cta=`<button class="btn ghost" onclick="showQR('${e.id}')">🎫 查看報到 QR Code</button>`;
+  } else if(S.regs[e.id]){
+    cta=`<button class="btn ghost" onclick="showQR('${e.id}')">🎫 查看報到 QR Code</button>
+      <button class="btn danger" style="margin-top:8px;width:100%" onclick="cancelReg('${e.id}')">取消報名（72 小時前無責）</button>`;
+  } else {
+    cta=`<button class="btn primary" onclick="startSignup('${e.id}')">立即報名</button>`;
+  }
+  return `<div class="backbar"><button onclick="S.detail=null;render()">‹ 返回</button><span>賽事詳情</span></div>
+  <div class="card">
+    <div class="evTitle" style="font-size:17px">${e.title}</div>
+    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><span class="badge b-t-${e.t}">${TIER_INFO[e.t].nm}</span>${statusBadge(e)}${confirmBadge(e)}</div>
+    <div class="kv">
+      <b>賽事等級</b><span>${TIER_INFO[e.t].nm.slice(2)}（${TIER_INFO[e.t].desc}）・獎盃同級</span>
+      <b>時間</b><span>${e.date}</span>
+      <b>地點</b><span>${e.venue}</span>
+      <b>分組</b><span>${e.div}</span>
+      <b>名額</b><span>${e.mode==='lottery'?`${e.cap} 名（已登記 ${e.now} 人）`:`${e.now}/${e.cap} ${e.unit||'名'}`}</span>
+      <b>報名模式</b><span>${e.mode==='lottery'?'登記抽籤制':'先到先得'}</span>
+      <b>成行門檻</b><span>滿 ${e.min} ${e.unit==='隊'?'隊':'人'}成行（賽前 48 小時判定，未達自動流局全額退費）</span>
+      <b>押金</b><span>${e.deposit?`NT$${e.deposit}（到場折抵／退還）`:'免費'}</span>
+    </div>
+    <div class="ruleBox">📜 ${e.rule}</div>
+    <div class="orgLine" style="margin-top:12px">🏪 ${e.org} <span class="verified">✓ 認證主辦</span>
+      <span style="margin-left:auto"><span class="star">★</span> ${e.orgStar}（${e.orgN} 場）｜準時率 ${e.ontime}</span></div>
+  </div>${cta}`;
+}
+
+/* ================= SIGNUP FLOW ================= */
+let signupEvent=null;
+function startSignup(id){ signupEvent=id;
+  openModal(`<h3>選擇出賽選手</h3><div class="sub">此帳號（TOM 的 LINE）底下的選手檔案</div>
+    ${PLAYERS.map(p=>`<div class="pRow ${S.selectedPlayer===p.id?'sel':''}" onclick="pickPlayer('${p.id}')">
+      <div class="avatar">${p.em}</div>
+      <div class="pInfo"><div class="pName">${p.name}</div><div class="pSub">${p.age} 歲・生涯 ${p.games} 場</div></div>
+      ${attTag(p)}</div>`).join('')}
+    <div style="margin-top:14px"><button class="btn primary" onclick="afterPickPlayer()">下一步</button></div>`);
+}
+function pickPlayer(id){ S.selectedPlayer=id;
+  document.querySelectorAll('.pRow').forEach(r=>r.classList.remove('sel'));
+  event.currentTarget.classList.add('sel'); }
+function afterPickPlayer(){
+  if(!S.phoneVerified) return showOTP();
+  finishSignup();
+}
+function showOTP(){
+  openModal(`<h3>首次報名・驗證手機</h3>
+    <div class="sub">為維護報名公平（一門號一帳號），首次報名需驗證一次手機，之後不再詢問。</div>
+    <input class="phoneInput" id="phone" type="tel" placeholder="09xx-xxx-xxx" value="0912-345-678">
+    <div class="otpBoxes">
+      <input maxlength="1" value="8"><input maxlength="1" value="8"><input maxlength="1" value="6"><input maxlength="1" value="1">
+    </div>
+    <div class="sub" style="text-align:center">簡訊驗證碼已送出（<span class="hint">DEMO</span> 免輸入）</div>
+    <div style="margin-top:14px"><button class="btn primary" onclick="S.phoneVerified=true;finishSignup()">驗證並完成綁定</button></div>`);
+}
+function finishSignup(){
+  const e=ev(signupEvent);
+  if(e.mode==='lottery'){ S.lottery='registered'; closeModal(); render();
+    toast('🎲 已登記抽籤！開獎後 LINE 通知你'); return; }
+  S.regs[e.id]={playerId:S.selectedPlayer,status:'ok'}; e.now++;
+  closeModal(); render(); showQR(e.id, true);
+}
+function showQR(id, fresh){
+  const e=ev(id); const p=player((S.regs[id]||{playerId:S.selectedPlayer}).playerId);
+  openModal(`<h3>${fresh?'🎉 報名成功！':'報到憑證'}</h3>
+    <div class="sub">${e.title}｜${e.date}</div>
+    <div class="qrWrap">
+      <div class="pRow" style="width:100%"><div class="avatar">${p.em}</div>
+        <div class="pInfo"><div class="pName">${p.name}</div><div class="pSub">出賽選手・現場請出示此畫面</div></div>${attTag(p)}</div>
+      ${qrHTML()}
+      <div class="sub" style="text-align:center">一次性報到 QR・由主辦方現場掃描核對頭像<br>掃碼即完成出席登記，直接累積到場榮譽</div>
+    </div>
+    <button class="btn ghost" onclick="closeModal()">關閉</button>`);
+}
+function cancelReg(id){ const e=ev(id); delete S.regs[id]; e.now--; render(); toast('已取消報名，名額釋出給候補'); }
+function drawLottery(){ S.lottery='drawn';
+  openModal(`<div class="lotBig">🎰</div><h3 style="text-align:center">開獎結果</h3>
+    <div class="confetti">🎊 ✨ 🎉 ✨ 🎊</div>
+    <div class="notice" style="text-align:center;margin-top:12px"><b>${player(S.selectedPlayer).name} 中籤！</b><br>
+    抽籤名單公開透明・61 人抽 32 名<br><span class="sub">未中籤者已依序排入候補</span></div>
+    <button class="btn primary" onclick="closeModal();render()">查看確認步驟</button>`);
+  render(); }
+function confirmLottery(){ S.lottery='confirmed'; ev('e3').status='confirmed'; render();
+  toast('✅ 已確認！押金 NT$100 已透過 LINE Pay 繳交'); }
+
+/* ================= PLAYER: TEAM (Phase 2 預告頁) ================= */
+function vTeam(){
+  return `<h2 class="section">🤝 自動組隊 <span class="sub">Phase 2 即將推出</span></h2>
+  <div class="card" style="text-align:center;padding:26px 18px">
+    <div style="font-size:44px">🤝</div>
+    <div class="evTitle" style="margin-top:10px">像排副本一樣找隊友</div>
+    <div class="sub" style="margin-top:10px;line-height:2;font-size:12.5px">
+      團體戰（3 人一隊）開放後，沒隊友也能打團體賽：<br>
+      按「我要組隊」登記 → 系統依年齡組與到場率湊隊<br>
+      → 湊滿 LINE 通知全員限時確認 → 成團鎖定名額<br>
+      也可以自己開隊，一鍵傳 LINE 邀請朋友入隊
+    </div>
+    <button class="btn primary" style="margin-top:16px" onclick="toast('📲 已登記！團體戰開放時第一時間 LINE 通知你')">🔔 開放時通知我</button>
+  </div>
+  <div class="notice warn" style="font-size:11.5px">💡 組隊時會顯示隊友的<b>到場率</b>——守信用的玩家更容易被組到隊。</div>`;
+}
+function vTeamFull_unused(){
+  const e=ev('e2'); const t=S.team;
+  let body='';
+  if(t.state==='none'){
+    body=`<div class="card">
+      <div class="evTitle">${e.title}</div>
+      <div class="evMeta">📅 ${e.date}｜3 人一隊・尚餘 ${e.cap-e.now} 隊名額</div>
+      <div class="divider"></div>
+      <div class="step"><span class="no">1</span><span><b>我要組隊（自動湊隊）</b>：登記後系統依年齡組與到場率湊隊，湊滿 3 人 LINE 通知全員確認。不用掛網等。</span></div>
+      <div class="step"><span class="no">2</span><span><b>自己開隊</b>：產生邀請連結傳給朋友，缺人可開放系統補位。</span></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" onclick="joinQueue()">🎯 我要組隊</button>
+        <button class="btn ghost" onclick="makeRoom()">➕ 自己開隊</button>
+      </div>
+    </div>`;
+  } else if(t.state==='queued'){
+    body=`<div class="card">
+      <div class="evTitle">湊隊中…</div>
+      <div class="notice">已為 <b>小宇</b> 登記「${e.title}」自動湊隊。<br>目前隊伍 <b>2/3</b> 人——湊滿後 LINE 會通知你，<b>15 分鐘內</b>全員按確認即成團並鎖定名額。</div>
+      <div class="pRow"><div class="avatar">🌀</div><div class="pInfo"><div class="pName">小宇（你）</div><div class="pSub">8 歲・通常組</div></div><span class="attTag att-hi">到場率 96%</span></div>
+      <div class="pRow"><div class="avatar">🐯</div><div class="pInfo"><div class="pName">虎太郎</div><div class="pSub">9 歲・通常組</div></div><span class="attTag att-hi">到場率 100%</span></div>
+      <div class="pRow" style="opacity:.45;border-style:dashed"><div class="avatar">❔</div><div class="pInfo"><div class="pName">等待第 3 位隊友…</div><div class="pSub">系統優先湊到場率相近的玩家</div></div></div>
+      <button class="btn gold" style="margin-top:12px" onclick="fillTeam()">⚡ 模擬湊滿 <span class="hint">DEMO</span></button>
+      <button class="btn ghost" style="margin-top:8px" onclick="S.team.state='none';render()">離開隊列</button>
+    </div>`;
+  } else if(t.state==='ready'){
+    const names=[['🌀','小宇（你）',96],['🐯','虎太郎',100],['🦖','小恐龍',92]];
+    body=`<div class="card" style="border-color:var(--acc)">
+      <div class="evTitle">🎉 找到隊伍了！Ready Check</div>
+      <div class="notice">全員需在 <b>14:32</b> 內按下確認，報名才成立。有人未確認則回到隊列，其餘人保留優先權。</div>
+      ${names.map((n,i)=>`<div class="pRow"><div class="avatar">${n[0]}</div>
+        <div class="pInfo"><div class="pName">${n[1]}</div><div class="pSub">到場率 ${n[2]}%</div></div>
+        <span class="st ${t.confirms[i]?'ok':'no'}" style="font-size:12px;font-weight:800">${t.confirms[i]?'✅ 已確認':'⏳ 等待中'}</span></div>`).join('')}
+      ${!t.confirms[0]
+        ? `<button class="btn primary" style="margin-top:12px" onclick="confirmReady()">✅ 我確認參賽</button>`
+        : `<button class="btn gold" style="margin-top:12px" onclick="othersReady()">⚡ 模擬隊友全部確認 <span class="hint">DEMO</span></button>`}
+    </div>`;
+  } else {
+    body=`<div class="card" style="border-color:var(--green)">
+      <div class="evTitle">✅ 成團！報名完成</div>
+      <div class="notice"><b>隊伍「宜蘭小旋風」</b>已鎖定「${e.title}」第 6 隊名額。<br>賽前 48 小時與前一晚會自動 LINE 提醒全隊。</div>
+      <div class="pRow"><div class="avatar">🌀</div><div class="pInfo"><div class="pName">小宇（你）</div></div><span class="st ok">✅</span></div>
+      <div class="pRow"><div class="avatar">🐯</div><div class="pInfo"><div class="pName">虎太郎</div></div><span class="st ok">✅</span></div>
+      <div class="pRow"><div class="avatar">🦖</div><div class="pInfo"><div class="pName">小恐龍</div></div><span class="st ok">✅</span></div>
+      <button class="btn ghost" style="margin-top:12px" onclick="showQR('e2')">🎫 查看報到 QR Code</button>
+    </div>`;
+  }
+  return `<h2 class="section">🤝 自動組隊 <span class="sub">像排副本一樣找隊友</span></h2>${body}
+    <div class="notice warn" style="font-size:11.5px">💡 組隊時看得到隊友的<b>到場率</b>——守信用的玩家更容易被組到隊。無故缺席會記點，累積將暫停報名資格。</div>`;
+}
+function joinQueue(){ S.team.state='queued'; S.regs['e2']={playerId:'p1',status:'ok'}; render(); toast('已登記湊隊，湊滿會 LINE 通知你'); }
+function makeRoom(){ openModal(`<h3>隊伍已建立！</h3><div class="sub">邀請隊友加入「宜蘭小旋風」</div>
+  <button class="btn line" style="margin-top:14px" onclick="closeModal();toast('📲 已開啟 LINE，選擇群組或好友發送邀請卡')">
+    <span class="lineIc">LINE</span> 傳到 LINE 邀請隊友</button>
+  <div class="sub" style="text-align:center;margin-top:8px;font-size:11px">會直接跳出 LINE 的群組／好友選擇器（LIFF），對方點卡片即可入隊</div>
+  <div class="divider"></div>
+  <div class="ruleBox" style="word-break:break-all">https://beyparty.tw/team/join/XK92FA</div>
+  <button class="btn ghost" style="margin-top:10px" onclick="closeModal();toast('已複製邀請連結')">📋 複製連結（備用）</button>`); }
+function fillTeam(){ S.team.state='ready'; render(); toast('📲 LINE 通知：找到隊伍了！'); }
+function confirmReady(){ S.team.confirms[0]=true; render(); }
+function othersReady(){ S.team.confirms=[true,true,true]; S.team.state='formed'; ev('e2').now++; render(); toast('🎉 全員確認，成團成功！'); }
+
+/* ================= PLAYER: BRACKET ================= */
+const BRACKET = {
+  qf:[ {a:'小宇',b:'阿哲',w:0,sc:'4:2',done:true}, {a:'虎太郎',b:'小美',w:0,sc:'4:1',done:true},
+       {a:'小恐龍',b:'俊俊',w:1,sc:'2:4',done:true}, {a:'皮皮',b:'大雄',w:0,sc:'4:3',done:true} ],
+  sf:[ {a:'小宇',b:'虎太郎',w:-1,sc:'',done:false,live:true,stadium:2}, {a:'俊俊',b:'皮皮',w:-1,sc:'',done:false} ],
+  f:[ {a:'—',b:'—',w:-1,sc:'',done:false} ],
+};
+function matchHTML(m){
+  const rows=(who,idx)=>{
+    const cls = m.done ? (m.w===idx?'win':'lose') : '';
+    return `<div class="mrow ${cls}"><span class="nm">${who}</span><span class="sc">${m.done?m.sc.split(':')[idx]:''}</span></div>`;
+  };
+  return `<div class="match ${m.live?'live':''} ${m.done?'done':''}">
+    ${m.live?`<div class="stadiumTag">🔴 進行中・第 ${m.stadium} 決鬥台</div>`:''}
+    ${rows(m.a,0)}${rows(m.b,1)}</div>`;
+}
+function vBracket(){
+  return `<h2 class="section">⚔️ 對戰表 <span class="sub">羅東玩具窟 每日銅賽・16 強起</span></h2>
+  <div class="callBox">📣 <b>現場叫號</b>：小宇 的下一場是 <b>準決賽 vs 虎太郎</b>，
+  位置在<b>第 2 決鬥台</b>——就是現在！<br><span style="color:var(--sub);font-size:11.5px">成績由現場裁判輸入，賽後 10 分鐘內可提出成績異議</span></div>
+  <div class="bracket">
+    <div class="round"><div class="roundTitle">8 強</div>${BRACKET.qf.map(matchHTML).join('')}</div>
+    <div class="round"><div class="roundTitle">準決賽</div>${BRACKET.sf.map(matchHTML).join('')}</div>
+    <div class="round"><div class="roundTitle">決賽</div>${BRACKET.f.map(matchHTML).join('')}</div>
+  </div>
+  <div class="notice" style="font-size:11.5px">此頁對所有到場玩家與家長即時更新——第幾台、下一場對手、還有幾場輪到你，一目瞭然。</div>`;
+}
+
+/* ================= PLAYER: CARD ================= */
+function vCard(){
+  const p=player('p1');
+  return `<h2 class="section">🎴 選手卡 <span class="sub">公開頁 beyparty.tw/player/xiaoyu</span></h2>
+  <div class="hero"><div class="shine"></div>
+    <div class="heroTop">
+      <div class="avatar big">${p.em}</div>
+      <div><div class="heroName">小宇</div><div class="heroTeam">🛡️ 戰隊：宜蘭小旋風</div>
+        <div style="margin-top:5px"><span class="attTag att-hi">到場率 96%</span></div></div>
+      <div class="heroHonor"><span class="shield">🛡️</span>黃金盾<br>守信榮譽</div>
+    </div>
+    <div class="heroStats">
+      <div class="hs"><b>12</b><span>參賽場次</span></div>
+      <div class="hs"><b>58%</b><span>累積勝率</span></div>
+      <div class="hs"><b>冠軍</b><span>最佳名次</span></div>
+      <div class="hs"><b>${S.newTrophy?2:1}</b><span>登頂次數</span></div>
+    </div>
+  </div>
+  ${S.newTrophy?`<div class="notice" style="border-color:var(--gold);background:rgba(255,207,77,.1)">🎉 <b>新獎盃入袋！</b>2026/08 羅東玩具窟 每日銅賽 <b>銅級冠軍盃</b>——由認證主辦「羅東玩具窟」發放，不可竄改。</div>`:''}
+  <div class="wallTitle">🏅 徽章展示牆 <small>邊框顏色＝賽事等級</small></div>
+  <div class="badgeGrid">
+    ${S.newTrophy?`<div class="tro new t-bronze" onclick="showPoster()"><div class="ic">🏆</div><div class="nm">銅級冠軍盃</div><div class="dt">2026/08 羅東玩具窟<br><b style="color:var(--gold)">NEW</b></div></div>`:''}
+    ${TROPHIES.map(t=>`<div class="tro ${t.got?'':'locked'} ${t.tier?'t-'+t.tier:''}" ${t.got?`onclick="showPoster()"`:''}>
+      <div class="ic">${t.ic}</div><div class="nm">${t.nm}</div><div class="dt">${t.got?t.dt:'尚未解鎖'}</div></div>`).join('')}
+  </div>
+  <button class="btn gold" style="margin-top:14px" onclick="showPoster()">📤 產生獲獎海報・一鍵分享</button>
+  <div class="notice warn" style="font-size:11.5px;margin-top:10px">🔒 海報預設使用平台頭像與暱稱，不含真實照片與全名——是否露臉由家長決定。</div>`;
+}
+function showPoster(){
+  openModal(`<h3>獲獎海報</h3><div class="sub">自動合成，一鍵分享到 LINE／FB／IG／Threads</div>
+  <div class="poster">
+    <div class="cup">🏆</div>
+    <h4>小宇 登頂！</h4>
+    <div class="evn">2026/0${S.newTrophy?8:7} 羅東玩具窟 每日銅賽<br><span class="badge b-t-bronze">🥉 銅級賽事</span> 個人賽・通常組 <b style="color:var(--gold)">冠軍</b></div>
+    <div class="stats"><span><b>12</b>參賽</span><span><b>58%</b>勝率</span><span><b>🛡️</b>黃金盾</span></div>
+    <div class="brand"><span class="miniqr"></span> 🌀 陀螺集結 beyparty.tw｜掃碼看小宇的選手卡</div>
+  </div>
+  <div class="row">
+    <button class="btn primary" onclick="closeModal();toast('已分享到 LINE 家族群組 📤')">LINE</button>
+    <button class="btn ghost" onclick="closeModal();toast('已分享 📤')">FB</button>
+    <button class="btn ghost" onclick="closeModal();toast('已分享 📤')">IG</button>
+    <button class="btn ghost" onclick="closeModal();toast('已分享 📤')">Threads</button>
+  </div>`);
+}
+
+/* ================= ORG: MANAGE ================= */
+const ORG = {
+  checkins:[
+    {em:'🌀',name:'小宇',att:96,done:true},{em:'🐯',name:'虎太郎',att:100,done:true},
+    {em:'🦊',name:'阿哲',att:91,done:true},{em:'🐰',name:'小美',att:94,done:true},
+    {em:'🦖',name:'小恐龍',att:92,done:false},{em:'🐸',name:'俊俊',att:85,done:false},
+  ],
+  judge:{a:'小宇',aEm:'🌀',b:'虎太郎',bEm:'🐯',picked:-1,round:'準決賽',stadium:2,scoreA:0,scoreB:0,finished:false},
+  settled:false,
+};
+function vOrgManage(){
+  return `<h2 class="section">📋 我的賽事 <span class="sub">羅東玩具窟 ✓ 認證主辦</span></h2>
+  <div class="card" style="border-color:var(--org)">
+    <div class="evTop"><div style="flex:1">
+      <div class="evTitle">每日銅賽・8/16 午場 <span class="badge b-t-bronze">🥉 銅級</span></div>
+      <div class="evMeta">8/16（日）13:00｜報名 15/16｜✓ 已確認成行（門檻 8 人）</div></div>
+      <span class="badge b-open">進行中</span></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn org small" onclick="setTab('checkin')">📷 報到</button>
+      <button class="btn org small" onclick="setTab('judge')">⚖️ 裁判</button>
+      <button class="btn org small" onclick="setTab('settle')">🏆 結算</button>
+    </div></div>
+  <div class="card"><div class="evTop"><div style="flex:1">
+      <div class="evTitle">每日銅賽・8/17 午場 <span class="badge b-t-bronze">🥉 銅級</span></div>
+      <div class="evMeta">8/17（一）13:00｜報名中 6/16・成團門檻 8 人</div></div>
+      <span class="badge b-open">報名中</span></div></div>
+  <div class="notice warn" style="font-size:11.5px">🏅 你的開賽等級：<b>銅級</b>（已辦 12 場・★4.8）——再辦 <b>3 場</b>且評分維持 4.5 以上，即可解鎖<b>銀級週賽</b>（16 人成團）。等級由平台核定，獎盃與賽事同級。</div>
+  <div class="card" style="text-align:center">
+    <div class="orgLine" style="justify-content:center;margin:0 0 10px">
+      <span class="star">★</span> 4.8（12 場）｜準時開賽率 100%｜取消 0 次｜流局 1 次</div>
+    <div class="sub" style="font-size:11px;color:var(--sub)">玩家賽後匿名評分（限已報到者）——這是店家的公開信譽</div>
+  </div>
+  <button class="btn org" onclick="showNewEvent()">➕ 建立新賽事</button>`;
+}
+function showNewEvent(){
+  openModal(`<h3>建立新賽事</h3><div class="f">
+    <label>賽事名稱</label><input type="text" value="每日銅賽・8/18 午場">
+    <label>日期／時間</label><div class="row"><input type="date" value="2026-10-11"><input type="time" value="13:00"></div>
+    <label>賽事等級（平台依你的場次與信譽核定，不可自選）</label>
+    <div class="ruleBox" style="margin:0">🥉 銅級（每天可辦・8 人成團）｜銀級（每週・16 人成團）尚差 3 場解鎖</div>
+    <label>分組</label><div class="segment"><button class="on">個人賽</button><button>團體戰（3人隊）</button><button>親子組</button></div>
+    <label>報名模式</label><div class="segment"><button>先到先得</button><button class="on">登記抽籤（防秒殺）</button></div>
+    <label>名額 / 最低成行人數</label><div class="row"><input type="number" value="16"><input type="number" value="8"></div>
+    <label>押金（0 = 免費）</label><input type="number" value="0">
+    <label>陀螺規則備註</label><input type="text" value="官方第 12 版規則，禁用巫師幻杖">
+    <div style="margin-top:16px"><button class="btn org" onclick="closeModal();toast('✅ 賽事已建立並公開，開始接受登記')">發佈賽事</button></div>
+  </div>`);
+}
+/* ================= ORG: CHECKIN ================= */
+function vOrgCheckin(){
+  const done=ORG.checkins.filter(c=>c.done).length;
+  return `<h2 class="section">📷 掃碼報到 <span class="sub">每日銅賽・8/16 午場</span></h2>
+  <div class="card" style="text-align:center;border-style:dashed">
+    <div style="font-size:40px">📱</div>
+    <div class="sub" style="margin-top:6px">用手機鏡頭掃玩家的報到 QR<br>畫面會顯示選手頭像供肉眼核對——防冒名頂替</div>
+    <button class="btn org" style="margin-top:12px" onclick="scanNext()">模擬掃描下一位 <span class="hint">DEMO</span></button>
+  </div>
+  <div class="progLabel" style="margin:4px 2px"><span>已報到 ${done}/${ORG.checkins.length}</span><span>報到截止後自動產生對戰表</span></div>
+  ${ORG.checkins.map(c=>`<div class="checkRow"><div class="avatar" style="width:34px;height:34px;font-size:16px">${c.em}</div>
+    <div class="pInfo"><div class="pName" style="font-size:13px">${c.name}</div></div>
+    <span class="attTag ${c.att>=95?'att-hi':'att-mid'}">到場率 ${c.att}%</span>
+    <span class="st ${c.done?'ok':'no'}">${c.done?'✅ 已報到':'未到'}</span></div>`).join('')}`;
+}
+function scanNext(){
+  const next=ORG.checkins.find(c=>!c.done);
+  if(!next){ toast('全員報到完畢！可產生對戰表'); return; }
+  openModal(`<h3>掃描成功 ✅</h3>
+    <div class="pRow" style="margin-top:12px"><div class="avatar big">${next.em}</div>
+      <div class="pInfo"><div class="pName" style="font-size:16px">${next.name}</div>
+      <div class="pSub">個人賽・通常組｜押金已繳</div></div><span class="attTag att-hi">核對頭像</span></div>
+    <div class="notice" style="margin-top:12px">請核對現場選手與頭像相符，確認後完成報到。出席將自動累積到場榮譽。</div>
+    <button class="btn org" onclick="ORG.checkins.find(c=>!c.done).done=true;closeModal();render();toast('✅ ${next.name} 報到完成')">確認報到</button>`);
+}
+/* ================= ORG: JUDGE ================= */
+function vOrgJudge(){
+  const j=ORG.judge;
+  if(j.finished) return `<h2 class="section">⚖️ 裁判模式 <span class="sub">第 ${j.stadium} 決鬥台</span></h2>
+    <div class="judgeMatch"><div style="font-size:34px">✅</div>
+    <div class="evTitle" style="margin-top:6px">本場結束：${j.picked===0?j.a:j.b} 晉級決賽</div>
+    <div class="sub" style="margin-top:6px">比分 ${j.scoreA}:${j.scoreB}・已寫入對戰表，玩家端即時更新</div>
+    <button class="btn org" style="margin-top:14px" onclick="nextMatch()">下一場（決賽）</button></div>
+    <div class="notice warn" style="font-size:11.5px">家長可於賽後 10 分鐘內按「成績有誤」，由裁判修正並留下修改紀錄。</div>`;
+  return `<h2 class="section">⚖️ 裁判模式 <span class="sub">工作人員：小華（PIN 授權）</span></h2>
+  <div class="judgeMatch">
+    <div class="sub">${j.round}・第 ${j.stadium} 決鬥台</div>
+    <div class="vs">
+      <div class="fighter ${j.picked===0?'picked':''}" onclick="pickWinner(0)"><div class="em">${j.aEm}</div><div class="nm">${j.a}</div><div class="sub" style="font-size:11px">${j.scoreA} 分</div></div>
+      <span class="x">VS</span>
+      <div class="fighter ${j.picked===1?'picked':''}" onclick="pickWinner(1)"><div class="em">${j.bEm}</div><div class="nm">${j.b}</div><div class="sub" style="font-size:11px">${j.scoreB} 分</div></div>
+    </div>
+    <div class="scLabel">${j.aEm} ${j.a} 得分
+      <button class="minus" onclick="subPoint(0)" ${j.scoreA===0?'disabled':''}>−1 犯規／復原</button></div>
+    <div class="row">
+      <button class="btn ghost small sc3" onclick="addPoint(0,1)">＋1<small>Spin</small></button>
+      <button class="btn ghost small sc3" onclick="addPoint(0,2)">＋2<small>Over/Burst</small></button>
+      <button class="btn ghost small sc3" onclick="addPoint(0,3)">＋3<small>Xtreme</small></button>
+    </div>
+    <div class="scLabel">${j.bEm} ${j.b} 得分
+      <button class="minus" onclick="subPoint(1)" ${j.scoreB===0?'disabled':''}>−1 犯規／復原</button></div>
+    <div class="row">
+      <button class="btn ghost small sc3" onclick="addPoint(1,1)">＋1<small>Spin</small></button>
+      <button class="btn ghost small sc3" onclick="addPoint(1,2)">＋2<small>Over/Burst</small></button>
+      <button class="btn ghost small sc3" onclick="addPoint(1,3)">＋3<small>Xtreme</small></button>
+    </div>
+    <div class="sub" style="margin:10px 0 4px;font-size:11px">先取得 4 分者獲勝・點按即計分</div>
+  </div>
+  <button class="btn org" style="margin-top:12px" onclick="openBoard()">🖥️ 計分板模式（架在戰鬥盤旁）</button>
+  <div class="notice warn" style="font-size:11.5px;margin-top:10px">成績由裁判輸入（誰判定、誰輸入）——選手多為 6–12 歲無手機，且成績直接餵獎盃與信譽系統，裁判輸入才有公信力。</div>`;
+}
+/* ================= STADIUM SCOREBOARD ================= */
+const BD={hist:[],win:null,timer:null,cd:10};
+function openBoard(){ BD.hist=[]; BD.win=null; renderBoard(); $('#board').classList.add('show'); }
+function closeBoard(){ $('#board').classList.remove('show'); hideWin(); render(); }
+function hideWin(){ clearInterval(BD.timer); $('#winScr').className=''; $('#winScr').innerHTML=''; }
+function renderBoard(){
+  const j=ORG.judge;
+  $('#board').innerHTML=`
+  <div class="bd-top">⚔️ ${j.round}・第 ${j.stadium} 決鬥台・先取 4 分
+    <button class="exit" onclick="closeBoard()">✕ 離開</button></div>
+  <div class="bd-score">
+    <div class="bd-side blue"><div class="who">${j.aEm} ${j.a}</div><div class="num">${j.scoreA}</div><div class="bd-target">藍方・1P</div></div>
+    <div class="bd-colon">:</div>
+    <div class="bd-side red"><div class="who">${j.bEm} ${j.b}</div><div class="num">${j.scoreB}</div><div class="bd-target">紅方・2P</div></div>
+  </div>
+  <div class="bd-btns">
+    <div class="bd-col">
+      <button class="bd-btn blue" onclick="bdAdd(0,1,'Spin Finish')">＋1<small>Spin 旋轉勝出</small></button>
+      <button class="bd-btn blue" onclick="bdAdd(0,2,'Over / Burst Finish')">＋2<small>Over／Burst</small></button>
+      <button class="bd-btn blue" onclick="bdAdd(0,3,'Xtreme Finish')">＋3<small>Xtreme 極限擊飛</small></button>
+    </div>
+    <div class="bd-col">
+      <button class="bd-btn red" onclick="bdAdd(1,1,'Spin Finish')">＋1<small>Spin 旋轉勝出</small></button>
+      <button class="bd-btn red" onclick="bdAdd(1,2,'Over / Burst Finish')">＋2<small>Over／Burst</small></button>
+      <button class="bd-btn red" onclick="bdAdd(1,3,'Xtreme Finish')">＋3<small>Xtreme 極限擊飛</small></button>
+    </div>
+  </div>
+  <button class="bd-undo" onclick="bdUndo()" ${BD.hist.length?'':'disabled'}>↩ 復原上一筆／減分</button>`;
+}
+function bdAdd(side,pts,fin){
+  const j=ORG.judge;
+  if(side===0) j.scoreA+=pts; else j.scoreB+=pts;
+  BD.hist.push({side,pts});
+  beep(side===0?660:520);
+  if(j.scoreA>=4||j.scoreB>=4) return bdWin(j.scoreA>=4?0:1,fin);
+  renderBoard();
+}
+function bdUndo(){
+  const last=BD.hist.pop(); if(!last) return;
+  const j=ORG.judge;
+  if(last.side===0) j.scoreA=Math.max(0,j.scoreA-last.pts); else j.scoreB=Math.max(0,j.scoreB-last.pts);
+  renderBoard();
+}
+function bdWin(side,fin){
+  const j=ORG.judge; BD.win=side; BD.cd=10;
+  const nm=side===0?j.a:j.b, em=side===0?j.aEm:j.bEm, color=side===0?'blue':'red', tag=side===0?'藍方':'紅方';
+  fanfare(); speak(`${tag} ${nm} 獲勝`);
+  const w=$('#winScr'); w.className='show '+color;
+  w.innerHTML=`<div class="em">${em}</div><h2>🎉 ${tag} ${nm} 獲勝！</h2>
+    <div class="fin">${fin}・比分 ${j.scoreA} : ${j.scoreB}</div>
+    <div class="cd">⏱ <b id="bdCd">10</b> 秒後自動寫入對戰表</div>
+    <div class="row">
+      <button class="btn primary" onclick="bdCommit()">立即寫入</button>
+      <button class="btn danger" onclick="bdCancelWin()">↩ 誤判復原</button>
+    </div>`;
+  BD.timer=setInterval(()=>{ BD.cd--; const el=$('#bdCd'); if(el) el.textContent=BD.cd;
+    if(BD.cd<=0) bdCommit(); },1000);
+}
+function bdCancelWin(){ hideWin(); bdUndo(); renderBoard(); }
+function bdCommit(){
+  clearInterval(BD.timer);
+  const j=ORG.judge; j.picked=j.scoreA>=4?0:1; j.finished=true;
+  const winner=j.picked===0?j.a:j.b;
+  BRACKET.sf[0]={a:j.a,b:j.b,w:j.picked,sc:`${j.scoreA}:${j.scoreB}`,done:true};
+  BRACKET.f[0]={a:winner,b:'俊俊',w:-1,sc:'',done:false,live:true,stadium:1};
+  hideWin(); closeBoard();
+  toast(`🏁 ${winner} 獲勝，成績已寫入對戰表`);
+}
+/* sound: WebAudio beep + fanfare + speech */
+let AC=null;
+function tone(freq,t0,dur,type='square',gain=.08){
+  try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.type=type;o.frequency.value=freq;o.connect(g);g.connect(AC.destination);
+    const t=AC.currentTime+t0; g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+    o.start(t);o.stop(t+dur);
+  }catch(e){}
+}
+function beep(f){ tone(f,0,.12); }
+function fanfare(){ [523,659,784,1047].forEach((f,i)=>tone(f,i*.14,.22,'triangle',.12)); }
+function speak(txt){ try{ const u=new SpeechSynthesisUtterance(txt); u.lang='zh-TW'; u.rate=.95; speechSynthesis.speak(u);}catch(e){} }
+function addPoint(side,pts){
+  const j=ORG.judge;
+  if(side===0) j.scoreA+=pts; else j.scoreB+=pts;
+  if(j.scoreA>=4||j.scoreB>=4){ j.picked=j.scoreA>=4?0:1; j.finished=true;
+    const winner=j.picked===0?j.a:j.b;
+    // sync to player bracket
+    BRACKET.sf[0]={a:j.a,b:j.b,w:j.picked,sc:`${j.scoreA}:${j.scoreB}`,done:true};
+    BRACKET.f[0]={a:winner,b:'俊俊',w:-1,sc:'',done:false,live:true,stadium:1};
+    toast(`🏁 ${winner} 獲勝，晉級決賽！`);
+  }
+  render();
+}
+function subPoint(side){
+  const j=ORG.judge;
+  if(side===0) j.scoreA=Math.max(0,j.scoreA-1); else j.scoreB=Math.max(0,j.scoreB-1);
+  toast('已扣 1 分（犯規／誤按復原），異動已留存紀錄'); render();
+}
+function pickWinner(i){ ORG.judge.picked=i; render(); }
+function nextMatch(){
+  const j=ORG.judge; const winner=j.picked===0?{n:j.a,e:j.aEm}:{n:j.b,e:j.bEm};
+  ORG.judge={a:winner.n,aEm:winner.e,b:'俊俊',bEm:'🐸',picked:-1,round:'決賽',stadium:1,scoreA:0,scoreB:0,finished:false};
+  render();
+}
+/* ================= ORG: SETTLE ================= */
+function vOrgSettle(){
+  if(ORG.settled) return `<h2 class="section">🏆 結算發獎 <span class="sub">每日銅賽・8/16 午場</span></h2>
+    <div class="card" style="text-align:center;border-color:var(--gold)">
+      <div style="font-size:40px">🎉</div>
+      <div class="evTitle" style="margin-top:8px">數位獎盃已發放！</div>
+      <div class="sub" style="margin-top:8px;line-height:1.9">4 位選手已收到 LINE 通知<br>獎盃永久標註「羅東玩具窟」——選手每次分享都是門市曝光<br><span style="color:var(--sub)">誤發可於 48 小時內撤回</span></div>
+      <button class="btn ghost" style="margin-top:12px" onclick="setRole('player');S.tab='card';render()">👀 切到玩家端看小宇的新獎盃</button>
+    </div>`;
+  return `<h2 class="section">🏆 結算發獎 <span class="sub">成績由對戰表自動帶入</span></h2>
+  <div class="notice" style="font-size:11.5px;margin-bottom:4px">本賽事為 <b>🥉 銅級</b>——發放的獎盃為同等級（銅級冠軍盃／亞軍盃…），等級標記永久跟著獎盃。</div>
+  <div class="rankRow"><span class="medal">🥇</span><span class="who">小宇</span><span class="cup">🏆 銅級冠軍盃</span></div>
+  <div class="rankRow"><span class="medal">🥈</span><span class="who">俊俊</span><span class="cup">🥈 銅級亞軍盃</span></div>
+  <div class="rankRow"><span class="medal">🥉</span><span class="who">虎太郎</span><span class="cup">🥉 銅級季軍盃</span></div>
+  <div class="rankRow"><span class="medal">🎖️</span><span class="who">皮皮</span><span class="cup">銅級殿軍勳章</span></div>
+  <div class="notice warn" style="margin-top:12px;font-size:12px">確認後系統自動：發放數位獎盃 → 更新選手生涯數據 → 判定成就徽章（連勝、首勝…）→ 結算全員出席與信譽。<b>你不用花一毛錢做獎牌。</b></div>
+  <button class="btn org" onclick="ORG.settled=true;S.newTrophy=true;render();toast('🏆 獎盃已發放，選手收到 LINE 通知！')">一鍵發放數位獎盃</button>`;
+}
+
+render();
+</script>
+</body>
+</html>
