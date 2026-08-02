@@ -6,12 +6,15 @@ import { getOrganizerForUser } from "@/lib/organizer";
 import { DbEvent, EVENT_STATUS_LABEL, formatTaipei } from "@/lib/events";
 import { bracketComplete } from "@/lib/bracket";
 import { loadBracketView } from "@/lib/bracketView";
+import QRCode from "qrcode";
+import { baseUrl } from "@/lib/line";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 import {
   BracketView,
   GenerateBracketButton,
   SettleFromBracketButton,
 } from "@/components/BracketView";
+import { RefereePanel, type RefereeRow } from "@/components/RefereePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,31 @@ export default async function HostBracketPage({
   const { matches, view } = await loadBracketView(db, event.id);
   const complete = matches.length > 0 && bracketComplete(matches);
 
+  // 裁判邀請資訊
+  const joinUrl = `${baseUrl()}/referee/${(event as DbEvent & { referee_code: string }).referee_code}`;
+  const qrDataUrl = await QRCode.toDataURL(joinUrl, { width: 180, margin: 2 });
+  const { data: refRows } = await db
+    .from("referees")
+    .select("id,user_id")
+    .eq("event_id", event.id)
+    .returns<Array<{ id: string; user_id: string }>>();
+  let referees: RefereeRow[] = [];
+  if (refRows && refRows.length > 0) {
+    const { data: refUsers } = await db
+      .from("users")
+      .select("id,display_name")
+      .in(
+        "id",
+        refRows.map((r) => r.user_id)
+      )
+      .returns<Array<{ id: string; display_name: string | null }>>();
+    const nameMap = new Map((refUsers ?? []).map((u) => [u.id, u.display_name]));
+    referees = refRows.map((r) => ({
+      refereeId: r.id,
+      displayName: nameMap.get(r.user_id) ?? "裁判",
+    }));
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <Link
@@ -59,6 +87,15 @@ export default async function HostBracketPage({
             label={EVENT_STATUS_LABEL[event.status]}
           />
         </div>
+      </div>
+
+      <div className="mt-4">
+        <RefereePanel
+          eventId={event.id}
+          joinUrl={joinUrl}
+          qrDataUrl={qrDataUrl}
+          referees={referees}
+        />
       </div>
 
       <div className="mt-5">

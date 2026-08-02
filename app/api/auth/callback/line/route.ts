@@ -40,7 +40,13 @@ export async function GET(req: NextRequest) {
     if (error || !data) throw new Error(error?.message ?? "users upsert 失敗");
 
     await createSessionCookie({ uid: data.id, name: profile.displayName });
-    return NextResponse.redirect(`${baseUrl()}/me`);
+
+    // 登入後導回原本要去的頁（僅站內路徑）
+    const next = cookies().get("xb_next")?.value;
+    cookies().delete("xb_next");
+    const dest =
+      next && next.startsWith("/") && !next.startsWith("//") ? next : "/me";
+    return NextResponse.redirect(`${baseUrl()}${dest}`);
   } catch (e) {
     console.error("LINE 登入失敗：", e);
     return loginFail("登入過程發生錯誤，請重試");

@@ -55,6 +55,36 @@ async function requireEventOwner(
   return { event };
 }
 
+/**
+ * 記分權限：該賽事主辦方，或掃碼加入的裁判。
+ * 裁判只能記勝負；產生對戰表、結算發獎仍限主辦方（requireEventOwner）。
+ */
+async function requireScorer(
+  eventId: string
+): Promise<{ error?: string; event?: DbEvent }> {
+  const session = await getSession();
+  if (!session) return { error: "請先登入" };
+  const db = supabaseAdmin();
+  const { data: event } = await db
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .single<DbEvent>();
+  if (!event) return { error: "找不到賽事" };
+
+  const organizer = await getOrganizerForUser(db, session.uid);
+  if (organizer && event.organizer_id === organizer.id) return { event };
+
+  const { data: referee } = await db
+    .from("referees")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("user_id", session.uid)
+    .maybeSingle();
+  if (referee) return { event };
+  return { error: "沒有記分權限（請向主辦方索取裁判邀請碼）" };
+}
+
 async function doCheckin(reg: DbRegistration): Promise<CheckinResult> {
   const db = supabaseAdmin();
   const { data: player } = await db
@@ -455,8 +485,11 @@ export async function reportWinner(
   const eventId = String(formData.get("event_id") ?? "");
   const matchId = String(formData.get("match_id") ?? "");
   const winnerId = String(formData.get("winner_id") ?? "");
-  const owner = await requireEventOwner(eventId);
-  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+  const scorer = await requireScorer(eventId);
+  if (scorer.error || !scorer.event) return { ok: false, error: scorer.error };
+  if (scorer.event.status === "done") {
+    return { ok: false, error: "賽事已結算，勝負已鎖定" };
+  }
 
   const db = supabaseAdmin();
   const matches = await loadMatches(db, eventId);
@@ -468,6 +501,7 @@ export async function reportWinner(
   if (err) return { ok: false, error: err };
 
   revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath(`/referee/event/${eventId}`);
   revalidatePath(`/event/${eventId}/bracket`);
   return { ok: true };
 }
@@ -479,8 +513,11 @@ export async function undoMatch(
 ): Promise<FormResult> {
   const eventId = String(formData.get("event_id") ?? "");
   const matchId = String(formData.get("match_id") ?? "");
-  const owner = await requireEventOwner(eventId);
-  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+  const scorer = await requireScorer(eventId);
+  if (scorer.error || !scorer.event) return { ok: false, error: scorer.error };
+  if (scorer.event.status === "done") {
+    return { ok: false, error: "賽事已結算，勝負已鎖定" };
+  }
 
   const db = supabaseAdmin();
   const matches = await loadMatches(db, eventId);
@@ -491,6 +528,7 @@ export async function undoMatch(
   if (err) return { ok: false, error: err };
 
   revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath(`/referee/event/${eventId}`);
   revalidatePath(`/event/${eventId}/bracket`);
   return { ok: true };
 }
@@ -537,5 +575,25 @@ export async function settleFromBracket(
   revalidatePath(`/host/event/${eventId}`);
   revalidatePath(`/host/event/${eventId}/bracket`);
   revalidatePath("/");
+  return { ok: true };
+}
+
+/** 移除裁判（僅主辦方） */
+export async function removeReferee(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const eventId = String(formData.get("event_id") ?? "");
+  const refereeId = String(formData.get("referee_id") ?? "");
+  const owner = await requireEventOwner(eventId);
+  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+
+  const db = supabaseAdmin();
+  await db
+    .from("referees")
+    .delete()
+    .eq("id", refereeId)
+    .eq("event_id", eventId);
+  revalidatePath(`/host/event/${eventId}/bracket`);
   return { ok: true };
 }
