@@ -101,9 +101,20 @@ export default async function EventPage({
         <h1 className="mt-2 text-2xl font-black">{event.title}</h1>
         <dl className="mt-3 space-y-1.5 text-sm text-slate-300">
           <div>🗓 {formatTaipei(event.starts_at)}（台灣時間）</div>
-          <div>
-            📍 {event.region}｜{event.venue}
-          </div>
+          <div>📍 {event.venue}</div>
+          {event.address && (
+            <div>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyanx underline decoration-cyanx/40 hover:decoration-cyanx"
+              >
+                🗺️ {event.address}
+              </a>
+              <span className="ml-1 text-xs text-slate-500">（點開導航）</span>
+            </div>
+          )}
           <div>🎯 {event.division}</div>
           {event.rules_note && (
             <div className="rounded-lg bg-arena p-3 text-xs text-slate-400">

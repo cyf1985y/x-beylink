@@ -197,9 +197,8 @@ export async function createEvent(
   const startsDate = String(formData.get("starts_date") ?? "");
   const startsTime = String(formData.get("starts_time") ?? "");
   const venue = String(formData.get("venue") ?? "").trim();
-  const region = String(formData.get("region") ?? "宜蘭").trim();
+  const address = String(formData.get("address") ?? "").trim();
   const division = String(formData.get("division") ?? "");
-  const capacity = Number(formData.get("capacity"));
   const rulesNote = String(formData.get("rules_note") ?? "").trim();
 
   if (title.length < 2 || title.length > 40) {
@@ -228,16 +227,15 @@ export async function createEvent(
   if (startsAt.getTime() < Date.now() + 3600_000) {
     return { ok: false, error: "開賽時間至少要在 1 小時之後" };
   }
-  if (!venue) return { ok: false, error: "請填場地" };
+  if (!venue) return { ok: false, error: "請填場地名稱" };
+  if (address.length < 6 || address.length > 60) {
+    return { ok: false, error: "請填完整地址（6 字以上）" };
+  }
   if (!["幼兒／國小組", "國中／高中組", "成人組", "其他"].includes(division)) {
     return { ok: false, error: "請選擇組別" };
   }
-  if (!Number.isInteger(capacity) || capacity < minRequired || capacity > 128) {
-    return {
-      ok: false,
-      error: `名額需為 ${minRequired}（成團門檻）到 128 之間的整數`,
-    };
-  }
+  // 名額上限依等級鎖死（銅 16／銀 32／金 64），不接受表單值
+  const capacity = TIERS[tier].capacity;
 
   // 成行判定時間：開賽前 24 小時；若開賽在 26 小時內，改為開賽前 2 小時
   const dayBefore = startsAt.getTime() - 24 * 3600_000;
@@ -256,7 +254,8 @@ export async function createEvent(
       tier,
       starts_at: startsAt.toISOString(),
       venue,
-      region: region || "宜蘭",
+      region: "宜蘭",
+      address,
       division,
       capacity,
       min_required: minRequired,

@@ -7,13 +7,6 @@ import { TIERS, Tier } from "@/lib/events";
 
 const initialState: FormResult = { ok: false };
 
-/** 各等級預帶名額上限 */
-const TIER_CAPACITY: Record<Tier, number> = {
-  bronze: 16,
-  silver: 32,
-  gold: 64,
-};
-
 const DIVISIONS = ["幼兒／國小組", "國中／高中組", "成人組", "其他"] as const;
 
 /** 常用開賽時間（半小時一格 10:00–20:30） */
@@ -68,7 +61,6 @@ const inputCls =
 export function NewEventForm({ tierAllowed }: { tierAllowed: Tier }) {
   const [state, formAction] = useFormState(createEvent, initialState);
   const [tier, setTier] = useState<Tier>("bronze");
-  const [capacity, setCapacity] = useState<number>(TIER_CAPACITY.bronze);
   const [date, setDate] = useState("");
   const allowedIdx = TIER_KEYS.indexOf(tierAllowed);
   const presets = quickDates();
@@ -106,10 +98,7 @@ export function NewEventForm({ tierAllowed }: { tierAllowed: Tier }) {
                   value={t}
                   disabled={locked}
                   checked={tier === t}
-                  onChange={() => {
-                    setTier(t);
-                    setCapacity(TIER_CAPACITY[t]);
-                  }}
+                  onChange={() => setTier(t)}
                   className="peer sr-only"
                 />
                 <span
@@ -172,19 +161,27 @@ export function NewEventForm({ tierAllowed }: { tierAllowed: Tier }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1.5 block text-sm font-bold text-slate-300">
-            場地
-          </label>
-          <input name="venue" required placeholder="例如：宜蘭陀螺基地" className={inputCls} />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-bold text-slate-300">
-            地區
-          </label>
-          <input name="region" defaultValue="宜蘭" className={inputCls} />
-        </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-bold text-slate-300">
+          場地名稱
+        </label>
+        <input name="venue" required placeholder="例如：宜蘭陀螺基地" className={inputCls} />
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-sm font-bold text-slate-300">
+          地址
+        </label>
+        <input
+          name="address"
+          required
+          maxLength={60}
+          placeholder="例如：宜蘭縣宜蘭市中山路三段 123 號"
+          className={inputCls}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          玩家可以在賽事頁一鍵開地圖導航
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -202,19 +199,12 @@ export function NewEventForm({ tierAllowed }: { tierAllowed: Tier }) {
           <label className="mb-1.5 block text-sm font-bold text-slate-300">
             名額上限
           </label>
-          <input
-            name="capacity"
-            type="number"
-            min={TIERS[tier].minRequired}
-            max={128}
-            value={capacity}
-            onChange={(e) => setCapacity(Number(e.target.value))}
-            required
-            className={inputCls}
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            {TIERS[tier].label}預設 {TIER_CAPACITY[tier]} 人，可自行調整
-          </p>
+          <div className="rounded-lg border border-arena-line bg-arena/50 px-3 py-2.5 text-slate-300">
+            <span className="font-num font-bold">{TIERS[tier].capacity}</span> 人
+            <span className="ml-1 text-xs text-slate-500">
+              （{TIERS[tier].label}固定）
+            </span>
+          </div>
         </div>
       </div>
 

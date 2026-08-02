@@ -1,10 +1,28 @@
 import type { DbPlayer } from "@/lib/supabase";
 
-/** 賽事等級設定 — 成團門檻寫死在後端，不可由主辦方自填（業務規則） */
+/** 賽事等級設定 — 成團門檻與名額上限寫死在後端，不可由主辦方自填（業務規則） */
 export const TIERS = {
-  bronze: { label: "銅級", minRequired: 8, color: "bronze", freq: "每日賽" },
-  silver: { label: "銀級", minRequired: 16, color: "silver", freq: "每週賽" },
-  gold: { label: "金級", minRequired: 32, color: "gold", freq: "每月賽" },
+  bronze: {
+    label: "銅級",
+    minRequired: 8,
+    capacity: 16,
+    color: "bronze",
+    freq: "每日賽",
+  },
+  silver: {
+    label: "銀級",
+    minRequired: 16,
+    capacity: 32,
+    color: "silver",
+    freq: "每週賽",
+  },
+  gold: {
+    label: "金級",
+    minRequired: 32,
+    capacity: 64,
+    color: "gold",
+    freq: "每月賽",
+  },
 } as const;
 
 export type Tier = keyof typeof TIERS;
@@ -21,6 +39,7 @@ export type DbEvent = {
   starts_at: string;
   venue: string;
   region: string;
+  address: string | null;
   division: string;
   capacity: number;
   min_required: number;
