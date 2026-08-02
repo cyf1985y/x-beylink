@@ -39,7 +39,7 @@ export default async function MePage() {
         </span>
       </h1>
       <p className="mt-1 text-sm text-slate-400">
-        一個帳號可建立多位選手（例如幫家裡的小選手各建一個檔案）。
+        每個帳號可建立 2 位選手：家長、小孩各 1 位。資料建立後不可修改。
       </p>
 
       <section className="mt-6 space-y-4">

@@ -40,6 +40,9 @@ export type DbPlayer = {
   user_id: string;
   nickname: string;
   birth_year: number;
+  role: "parent" | "child";
+  city: string | null;
+  team_name: string | null;
   avatar: string;
   attendance_ok: number;
   attendance_total: number;

@@ -81,6 +81,14 @@ export default async function PlayerPage({
           <h1 className="relative mt-3 text-3xl font-black italic tracking-wide text-glow">
             {player.nickname}
           </h1>
+          <p className="relative mt-1.5 text-sm text-slate-300">
+            {player.city ?? ""}
+            {player.team_name && (
+              <span className="ml-2 font-bold text-cyanx">
+                🏴 {player.team_name}
+              </span>
+            )}
+          </p>
           <p className="relative mt-1 font-num text-xs tracking-[0.3em] text-slate-400">
             SINCE {new Date(player.created_at).getFullYear()}
           </p>
