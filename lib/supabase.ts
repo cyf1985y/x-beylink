@@ -19,6 +19,11 @@ export function supabaseAdmin(): SupabaseClient {
   }
   cached = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      // Next.js 會把 fetch GET 結果放進 Data Cache，導致頁面讀到舊資料；
+      // 資料庫查詢一律不快取（bug：選手卡結算後仍顯示 0 獎盃）
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return cached;
 }
