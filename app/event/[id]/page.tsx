@@ -79,7 +79,7 @@ export default async function EventPage({
         ← 賽事列表
       </Link>
 
-      <div className="mt-4 rounded-2xl border border-arena-line bg-arena-card p-5">
+      <div className="card-x mt-4 p-5">
         <div className="flex items-center justify-between gap-2">
           <TierBadge tier={event.tier} />
           <StatusChip
@@ -87,7 +87,7 @@ export default async function EventPage({
             label={EVENT_STATUS_LABEL[event.status]}
           />
         </div>
-        <h1 className="mt-2 text-xl font-black">{event.title}</h1>
+        <h1 className="mt-2 text-2xl font-black">{event.title}</h1>
         <dl className="mt-3 space-y-1.5 text-sm text-slate-300">
           <div>🗓 {formatTaipei(event.starts_at)}（台灣時間）</div>
           <div>
@@ -112,10 +112,12 @@ export default async function EventPage({
               {waitCount > 0 && `｜候補 ${waitCount}`}
             </span>
           </div>
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-arena">
+          <div className="mt-1 h-2.5 -skew-x-12 overflow-hidden rounded-sm bg-arena">
             <div
-              className={`h-full rounded-full ${
-                okCount >= event.min_required ? "bg-emerald-400" : "bg-cyanx"
+              className={`h-full bg-stripes bg-[length:34px_34px] ${
+                okCount >= event.min_required
+                  ? "animate-stripes bg-emerald-400"
+                  : "bg-cyanx"
               }`}
               style={{ width: `${progress}%` }}
             />
@@ -137,7 +139,7 @@ export default async function EventPage({
       </Link>
 
       <section className="mt-6">
-        <h2 className="text-lg font-bold text-cyanx">我要報名</h2>
+        <h2 className="h-x">我要報名</h2>
         <div className="mt-3">
           {!session && (
             <Link

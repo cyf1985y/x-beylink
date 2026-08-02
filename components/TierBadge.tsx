@@ -10,10 +10,10 @@ export function TierBadge({ tier }: { tier: Tier }) {
   const t = TIERS[tier];
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold ${TIER_CLASSES[tier]}`}
+      className={`inline-flex -skew-x-12 items-center gap-1.5 border px-2.5 py-0.5 text-xs font-black tracking-wider ${TIER_CLASSES[tier]}`}
     >
-      🏅 {t.label}
-      <span className="font-normal opacity-70">{t.freq}</span>
+      {t.label}
+      <span className="font-medium opacity-70">{t.freq}</span>
     </span>
   );
 }
@@ -32,7 +32,9 @@ export function StatusChip({
         ? "border-cyanx/50 bg-cyanx/10 text-cyanx"
         : "border-slate-500/50 bg-slate-500/10 text-slate-400";
   return (
-    <span className={`rounded-full border px-2.5 py-0.5 text-xs ${cls}`}>
+    <span
+      className={`inline-block -skew-x-12 border px-2.5 py-0.5 text-xs font-bold tracking-wider ${cls}`}
+    >
       {label}
     </span>
   );

@@ -72,39 +72,42 @@ export default async function PlayerPage({
         ← 首頁
       </Link>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-cyanx/40 bg-arena-card shadow-glow">
-        <div className="bg-gradient-to-r from-cyanx/20 to-violetx/20 p-6 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-arena-line bg-arena text-5xl">
+      <div className="mt-4 overflow-hidden rounded-2xl border border-cyanx/40 bg-arena-card shadow-glow-strong">
+        <div className="relative bg-gradient-to-r from-cyanx/20 via-bluex/10 to-violetx/20 p-6 text-center">
+          <div className="absolute inset-0 bg-stripes bg-[length:34px_34px] opacity-[0.04]" />
+          <div className="relative mx-auto flex h-20 w-20 animate-floaty items-center justify-center rounded-2xl border border-cyanx/40 bg-arena text-5xl shadow-glow">
             {player.avatar}
           </div>
-          <h1 className="mt-3 text-2xl font-black">{player.nickname}</h1>
-          <p className="mt-1 text-xs text-slate-400">
-            出道於 {new Date(player.created_at).getFullYear()} 年
+          <h1 className="relative mt-3 text-3xl font-black italic tracking-wide text-glow">
+            {player.nickname}
+          </h1>
+          <p className="relative mt-1 font-num text-xs tracking-[0.3em] text-slate-400">
+            SINCE {new Date(player.created_at).getFullYear()}
           </p>
         </div>
 
         <div className="grid grid-cols-3 divide-x divide-arena-line border-t border-arena-line text-center">
           <div className="p-4">
-            <p className="text-xl font-black text-cyanx">
+            <p className="font-num text-2xl font-bold text-cyanx">
               {(trophies ?? []).length}
             </p>
-            <p className="text-xs text-slate-500">獎盃</p>
+            <p className="text-xs tracking-wider text-slate-500">獎盃</p>
           </div>
           <div className="p-4">
-            <p className="text-xl font-black text-gold">{champions}</p>
-            <p className="text-xs text-slate-500">冠軍</p>
+            <p className="font-num text-2xl font-bold text-gold">{champions}</p>
+            <p className="text-xs tracking-wider text-slate-500">冠軍</p>
           </div>
           <div className="p-4">
-            <p className="text-xl font-black text-slate-200">
+            <p className="font-num text-2xl font-bold text-slate-200">
               {attendanceRate === null ? "—" : `${attendanceRate}%`}
             </p>
-            <p className="text-xs text-slate-500">出席率</p>
+            <p className="text-xs tracking-wider text-slate-500">出席率</p>
           </div>
         </div>
       </div>
 
       <section className="mt-6">
-        <h2 className="text-lg font-bold text-gold">🏆 獎盃牆</h2>
+        <h2 className="h-x text-gold">獎盃牆</h2>
         <div className="mt-3 space-y-2">
           {(trophies ?? []).length === 0 && (
             <p className="rounded-2xl border border-dashed border-arena-line p-6 text-center text-sm text-slate-500">

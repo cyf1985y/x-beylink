@@ -54,8 +54,8 @@ export default async function MePage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-bold text-cyanx">＋ 新增選手</h2>
-        <div className="mt-3 rounded-2xl border border-arena-line bg-arena-card p-5">
+        <h2 className="h-x">新增選手</h2>
+        <div className="card-x mt-3 p-5">
           <NewPlayerForm />
         </div>
       </section>

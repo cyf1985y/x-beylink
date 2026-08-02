@@ -60,10 +60,10 @@ function PlayerRow({
     <div
       className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
         isWinner
-          ? "bg-cyanx/15 font-bold text-cyanx"
+          ? "bg-cyanx/15 font-black text-cyanx shadow-glow-win"
           : decided
             ? "text-slate-500 line-through decoration-slate-600"
-            : "text-slate-200"
+            : "font-bold text-slate-200"
       }`}
     >
       <span>{player?.avatar ?? "❔"}</span>
@@ -117,19 +117,21 @@ function MatchCard({
   const isBye = m.round === 1 && (!m.player1 || !m.player2);
   return (
     <div
-      className={`w-52 shrink-0 rounded-xl border p-2 ${
+      className={`card-x w-52 shrink-0 p-2 ${
         m.kind === "third"
-          ? "border-bronze/40 bg-arena-card"
+          ? "!border-bronze/40"
           : m.round === finalRound
-            ? "border-gold/40 bg-arena-card"
-            : "border-arena-line bg-arena-card"
+            ? "!border-gold/50 shadow-glow-gold"
+            : ""
       }`}
     >
-      <div className="mb-1 flex items-center justify-between px-1 text-[10px] text-slate-500">
-        <span>
+      <div className="mb-1 flex items-center justify-between px-1 text-[10px] tracking-wider text-slate-500">
+        <span className="font-bold">
           {m.kind === "third"
-            ? "季軍戰"
-            : `${roundName(m.round, finalRound)} 第 ${m.slot + 1} 場`}
+            ? "🥉 季軍戰"
+            : m.round === finalRound
+              ? "🏆 決賽"
+              : `${roundName(m.round, finalRound)}・${m.slot + 1}`}
           {isBye && "（輪空）"}
         </span>
         {interactive && decided && !isBye && (
@@ -144,6 +146,13 @@ function MatchCard({
         decided={decided}
         interactive={interactive}
       />
+      <div className="my-0.5 flex items-center gap-2 px-2">
+        <span className="h-px flex-1 bg-arena-line" />
+        <span className="font-num text-[10px] font-bold tracking-widest text-violetx">
+          VS
+        </span>
+        <span className="h-px flex-1 bg-arena-line" />
+      </div>
       <PlayerRow
         eventId={eventId}
         matchId={m.id}
