@@ -4,11 +4,20 @@ import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireScorer } from "@/lib/scorer";
 import { EVENT_STATUS_LABEL, formatTaipei } from "@/lib/events";
-import { roundName, finalRoundOf, WIN_POINTS } from "@/lib/bracket";
+import {
+  roundName,
+  finalRoundOf,
+  bracketComplete,
+  WIN_POINTS,
+} from "@/lib/bracket";
 import { loadBracketView } from "@/lib/bracketView";
 import { autoGenerateBrackets } from "@/lib/autoBracket";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
-import { BracketView } from "@/components/BracketView";
+import {
+  BracketView,
+  SettleFromBracketButton,
+} from "@/components/BracketView";
+import { HostTabBar } from "@/components/HostTabBar";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +39,7 @@ export default async function RefereeEventPage({
   const { matches, view } = await loadBracketView(db, event.id);
   const locked = event.status === "done";
   const finalRound = matches.length ? finalRoundOf(matches) : 1;
+  const allDone = matches.length > 0 && bracketComplete(matches);
 
   const nameOf = (id: string | null) =>
     view.find((v) => v.player1?.id === id)?.player1 ??
@@ -68,6 +78,33 @@ export default async function RefereeEventPage({
         </div>
       ) : (
         <>
+          {allDone && !locked && (
+            <section className="mt-6 rounded-2xl border-2 border-gold/60 bg-gold/10 p-5 text-center shadow-glow-gold">
+              <p className="text-3xl">🏁</p>
+              <p className="mt-1 text-lg font-black text-gold">
+                所有對戰已完成！
+              </p>
+              {auth.isOwner ? (
+                <>
+                  <p className="mt-1 text-xs text-slate-400">
+                    名次已由對戰結果自動判定，按下去就發獎盃、記出席、結束賽事
+                  </p>
+                  <SettleFromBracketButton eventId={event.id} />
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-slate-400">
+                  請主辦方進行結算發獎（裁判無發獎權限）
+                </p>
+              )}
+            </section>
+          )}
+
+          {locked && (
+            <section className="mt-6 rounded-2xl border border-emerald-400/50 bg-emerald-400/10 p-4 text-center text-sm text-emerald-300">
+              ✅ 本場已結算發獎完畢
+            </section>
+          )}
+
           <section className="mt-6">
             <h2 className="h-x">
               待進行對戰
@@ -175,6 +212,12 @@ export default async function RefereeEventPage({
           觀眾版對戰表 →
         </Link>
       </p>
+
+      <HostTabBar
+        eventId={event.id}
+        active="referee"
+        isOwner={!!auth.isOwner}
+      />
     </main>
   );
 }
