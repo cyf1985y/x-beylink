@@ -77,7 +77,14 @@ export async function registerPlayer(
       error_code: string | null;
     }>();
 
-  if (error || !data) return { ok: false, error: "報名失敗，請稍後再試" };
+  if (error || !data) {
+    console.error("register_player_atomic 呼叫失敗：", {
+      eventId,
+      playerId,
+      error,
+    });
+    return { ok: false, error: "報名失敗，請稍後再試" };
+  }
 
   if (!data.ok) {
     return {
@@ -135,12 +142,28 @@ export async function cancelRegistration(
     };
   }
 
+  // 併發保護：只有在狀態仍與我們讀到的一致時才寫入。連點兩下時只有第一個
+  // 請求會影響到資料列，第二個拿到 0 筆而提早返回，避免重複記點與重複遞補。
+  // 用 .eq("status", reg.status) 而非 .neq("cancelled")，是為了確保底下的
+  // wasOk 判斷成立——若這筆在我們讀取後剛好被遞補（waitlist→ok），
+  // 這次更新會落空並要求使用者重新確認，而不是靜靜地漏掉一次遞補。
   const wasOk = reg.status === "ok";
-  const { error } = await db
+  const { data: cancelledRows, error } = await db
     .from("registrations")
     .update({ status: "cancelled" })
-    .eq("id", regId);
-  if (error) return { ok: false, error: "取消失敗，請稍後再試" };
+    .eq("id", regId)
+    .eq("status", reg.status)
+    .select("id");
+  if (error) {
+    console.error("取消報名寫入失敗：", { regId, error });
+    return { ok: false, error: "取消失敗，請稍後再試" };
+  }
+  if (!cancelledRows || cancelledRows.length === 0) {
+    return {
+      ok: false,
+      error: "這筆報名剛剛已有異動（可能已取消或已遞補），請重新整理後再確認",
+    };
+  }
 
   // 賽前 72 小時內取消 → 記 0.5 點（賽事仍為有效狀態時才記）
   let penaltyNote = "";
@@ -162,9 +185,20 @@ export async function cancelRegistration(
   // 自動遞補：交給 promote_next_waitlist（鎖 event 列，且只在確實空出名額時
   // 才遞補），避免兩筆同時取消只遞補到一人、名額白白空掉。
   if (wasOk) {
-    const { data: promotedPlayerId } = await db.rpc("promote_next_waitlist", {
-      p_event_id: reg.event_id,
-    });
+    const { data: promotedPlayerId, error: promoteError } = await db.rpc(
+      "promote_next_waitlist",
+      { p_event_id: reg.event_id }
+    );
+
+    // 取消已經寫入，這裡失敗不該讓使用者的取消失敗——但要留下線索，
+    // 否則名額會空著、候補第一位永遠不會被遞補也不會收到通知。
+    if (promoteError) {
+      console.error("候補遞補失敗（名額可能空置）：", {
+        eventId: reg.event_id,
+        regId,
+        error: promoteError,
+      });
+    }
 
     if (promotedPlayerId) {
       await pushToPlayers(

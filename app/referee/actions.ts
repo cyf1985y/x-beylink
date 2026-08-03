@@ -41,9 +41,26 @@ export async function joinAsReferee(
       error_code: string | null;
     }>();
 
-  if (error || !data) return { ok: false, error: "加入失敗，請稍後再試" };
+  // 邀請碼只記前 8 碼，足以對照又不把完整憑證留在 log 裡
+  const codeHint = `${code.slice(0, 8)}…`;
+
+  if (error || !data) {
+    console.error("redeem_referee_code 呼叫失敗：", {
+      code: codeHint,
+      uid: session.uid,
+      error,
+    });
+    return { ok: false, error: "加入失敗，請稍後再試" };
+  }
 
   if (!data.ok || !data.event_id) {
+    // ok=true 卻沒有 event_id 代表函式回傳不符契約，值得留下紀錄
+    if (data.ok) {
+      console.error("redeem_referee_code 回傳 ok 但缺少 event_id：", {
+        code: codeHint,
+        uid: session.uid,
+      });
+    }
     return {
       ok: false,
       error: REDEEM_ERROR_MESSAGES[data.error_code ?? ""] ?? "加入失敗",
