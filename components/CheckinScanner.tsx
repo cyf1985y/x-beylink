@@ -97,7 +97,7 @@ export function CheckinScanner({ eventId }: { eventId: string }) {
         }, 3000);
       }
     },
-    [eventId]
+    [eventId, router]
   );
 
   const start = useCallback(async () => {
