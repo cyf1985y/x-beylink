@@ -3,6 +3,7 @@ import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { DbEvent } from "@/lib/events";
 import { DbMatch, roundName, loadMatches, finalRoundOf } from "@/lib/bracket";
 import { ScoreboardLive } from "@/components/ScoreboardLive";
+import { requireScorer } from "@/lib/scorer";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,14 @@ export default async function ScoreboardPage({
     };
   };
 
+  // 有記分權限（主辦方或裁判）就能直接在計分板上計分
+  const scorer = await requireScorer(match.event_id);
+  const canScore = !scorer.error && event?.status !== "done";
+
   return (
     <ScoreboardLive
+      eventId={match.event_id}
+      canScore={canScore}
       matchId={match.id}
       title={event?.title ?? "戰鬥陀螺對戰"}
       roundLabel={

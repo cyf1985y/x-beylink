@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
 import { requireScorer } from "@/lib/scorer";
 import {
   WIN_POINTS,
   loadMatches,
   applyWinner,
   undoWinner,
+  DbMatch,
 } from "@/lib/bracket";
 
 export type ScoreResult = {
@@ -16,11 +18,73 @@ export type ScoreResult = {
   score1?: number;
   score2?: number;
   winnerId?: string | null;
+  winnerName?: string | null;
+  winnerSide?: 1 | 2 | null;
 };
 
+/** 由計分紀錄重算比分（負分視為犯規扣分，最低 0） */
+async function recompute(matchId: string): Promise<{ s1: number; s2: number }> {
+  const db = supabaseAdmin();
+  const { data } = await db
+    .from("match_points")
+    .select("side,points")
+    .eq("match_id", matchId)
+    .returns<Array<{ side: number; points: number }>>();
+  let s1 = 0;
+  let s2 = 0;
+  for (const r of data ?? []) {
+    if (r.side === 1) s1 += r.points;
+    else s2 += r.points;
+  }
+  return { s1: Math.max(0, s1), s2: Math.max(0, s2) };
+}
+
+async function syncMatch(
+  match: DbMatch,
+  matches: DbMatch[],
+  s1: number,
+  s2: number
+): Promise<ScoreResult> {
+  const db = supabaseAdmin();
+  await db.from("matches").update({ score1: s1, score2: s2 }).eq("id", match.id);
+
+  const p1 = match.player1_id;
+  const p2 = match.player2_id;
+  let winnerId: string | null = null;
+  let winnerSide: 1 | 2 | null = null;
+
+  if (s1 >= WIN_POINTS && p1) {
+    winnerId = p1;
+    winnerSide = 1;
+  } else if (s2 >= WIN_POINTS && p2) {
+    winnerId = p2;
+    winnerSide = 2;
+  }
+
+  if (winnerId && match.winner_id !== winnerId) {
+    const err = await applyWinner(db, matches, match, winnerId);
+    if (err) return { ok: false, error: err };
+  } else if (!winnerId && match.winner_id) {
+    const err = await undoWinner(db, matches, match);
+    if (err) return { ok: false, error: err };
+  }
+
+  let winnerName: string | null = null;
+  if (winnerId) {
+    const { data } = await db
+      .from("players")
+      .select("nickname")
+      .eq("id", winnerId)
+      .maybeSingle<{ nickname: string }>();
+    winnerName = data?.nickname ?? null;
+  }
+
+  return { ok: true, score1: s1, score2: s2, winnerId, winnerName, winnerSide };
+}
+
 /**
- * 記一次得分（BEYBLADE X）：Spin +1、Over/Burst +2、Xtreme +3。
- * 累積達 4 分自動判定獲勝並晉級。
+ * 記一次得分：Spin +1、Over/Burst +2、Xtreme +3；犯規扣分傳 -1。
+ * 每筆都寫入 match_points 紀錄，因此可精準「復原上一筆」，且換裝置也不會丟。
  */
 export async function addPoint(
   eventId: string,
@@ -28,7 +92,7 @@ export async function addPoint(
   side: 1 | 2,
   points: number
 ): Promise<ScoreResult> {
-  if (![1, 2, 3].includes(points)) {
+  if (![1, 2, 3, -1].includes(points)) {
     return { ok: false, error: "得分不正確" };
   }
   const auth = await requireScorer(eventId);
@@ -41,34 +105,33 @@ export async function addPoint(
   const matches = await loadMatches(db, eventId);
   const match = matches.find((m) => m.id === matchId);
   if (!match) return { ok: false, error: "找不到這場對戰" };
-  if (match.winner_id) return { ok: false, error: "本場已分出勝負" };
+  if (match.winner_id && points > 0) {
+    return { ok: false, error: "本場已分出勝負（可按復原修正）" };
+  }
   const playerId = side === 1 ? match.player1_id : match.player2_id;
   if (!playerId) return { ok: false, error: "這一側還沒有選手" };
 
-  const score1 = side === 1 ? match.score1 + points : match.score1;
-  const score2 = side === 2 ? match.score2 + points : match.score2;
-  await db.from("matches").update({ score1, score2 }).eq("id", matchId);
+  const session = await getSession();
+  await db.from("match_points").insert({
+    match_id: matchId,
+    side,
+    points,
+    created_by: session?.uid ?? null,
+  });
 
-  // 達 4 分自動獲勝並晉級
-  let winnerId: string | null = null;
-  const mine = side === 1 ? score1 : score2;
-  if (mine >= WIN_POINTS) {
-    const err = await applyWinner(db, matches, match, playerId);
-    if (err) return { ok: false, error: err };
-    winnerId = playerId;
-  }
+  const { s1, s2 } = await recompute(matchId);
+  const result = await syncMatch(match, matches, s1, s2);
 
   revalidatePath(`/referee/event/${eventId}`);
   revalidatePath(`/host/event/${eventId}/bracket`);
   revalidatePath(`/event/${eventId}/bracket`);
-  return { ok: true, score1, score2, winnerId };
+  return result;
 }
 
-/** 犯規／誤按復原：該側 −1 分（最低 0）；若因此低於 4 分則撤銷勝負與晉級 */
-export async function subPoint(
+/** 復原上一筆計分（精準還原該筆分數，含誤判的獲勝晉級） */
+export async function undoLastPoint(
   eventId: string,
-  matchId: string,
-  side: 1 | 2
+  matchId: string
 ): Promise<ScoreResult> {
   const auth = await requireScorer(eventId);
   if (auth.error || !auth.event) return { ok: false, error: auth.error };
@@ -81,24 +144,23 @@ export async function subPoint(
   const match = matches.find((m) => m.id === matchId);
   if (!match) return { ok: false, error: "找不到這場對戰" };
 
-  const current = side === 1 ? match.score1 : match.score2;
-  const next = Math.max(0, current - 1);
-  const playerId = side === 1 ? match.player1_id : match.player2_id;
+  const { data: last } = await db
+    .from("match_points")
+    .select("id")
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (!last) return { ok: false, error: "沒有可復原的計分紀錄" };
 
-  // 已判定獲勝但扣分後不足 4 分 → 先撤銷晉級
-  if (match.winner_id && match.winner_id === playerId && next < WIN_POINTS) {
-    const err = await undoWinner(db, matches, match);
-    if (err) return { ok: false, error: err };
-  }
-
-  const score1 = side === 1 ? next : match.score1;
-  const score2 = side === 2 ? next : match.score2;
-  await db.from("matches").update({ score1, score2 }).eq("id", matchId);
+  await db.from("match_points").delete().eq("id", last.id);
+  const { s1, s2 } = await recompute(matchId);
+  const result = await syncMatch(match, matches, s1, s2);
 
   revalidatePath(`/referee/event/${eventId}`);
   revalidatePath(`/host/event/${eventId}/bracket`);
   revalidatePath(`/event/${eventId}/bracket`);
-  return { ok: true, score1, score2, winnerId: null };
+  return result;
 }
 
 /** 讀取單場即時比分（計分板輪詢用） */

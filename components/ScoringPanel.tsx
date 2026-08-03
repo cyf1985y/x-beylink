@@ -3,8 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { addPoint, subPoint, type ScoreResult } from "@/app/referee/scoring";
+import {
+  addPoint,
+  undoLastPoint,
+  type ScoreResult,
+} from "@/app/referee/scoring";
 import { FINISH_TYPES, WIN_POINTS } from "@/lib/bracket";
+import { beepScore, beepUndo, fanfare, speak } from "@/lib/sound";
 
 export type ScoringMatch = {
   id: string;
@@ -123,8 +128,9 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
   const finished = !!winnerId;
   const ready = !!match.player1 && !!match.player2;
 
-  const handle = (fn: () => Promise<ScoreResult>) => {
+  const handle = (fn: () => Promise<ScoreResult>, onBefore?: () => void) => {
     setError(null);
+    onBefore?.();
     startTransition(async () => {
       const r = await fn();
       if (!r.ok) {
@@ -133,15 +139,11 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
       }
       if (typeof r.score1 === "number") setS1(r.score1);
       if (typeof r.score2 === "number") setS2(r.score2);
-      if (r.winnerId) {
-        setWinnerId(r.winnerId);
-        try {
-          navigator.vibrate?.([120, 60, 200]);
-        } catch {
-          /* ignore */
-        }
-      } else if (r.winnerId === null) {
-        setWinnerId(null);
+      const prev = winnerId;
+      setWinnerId(r.winnerId ?? null);
+      if (r.winnerId && prev !== r.winnerId) {
+        fanfare();
+        speak(`${r.winnerSide === 1 ? "藍方" : "紅方"} ${r.winnerName ?? ""} 獲勝`);
       }
       router.refresh();
     });
@@ -183,24 +185,19 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
           <p className="mt-1 text-xs text-slate-400">
             已自動晉級；按下方「−1 犯規／復原」可修正誤判
           </p>
-          <div className="mt-3 flex justify-center gap-2">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => handle(() => subPoint(match.eventId, match.id, 1))}
-              className="rounded-lg border border-arena-line px-3 py-1.5 text-xs text-slate-400 hover:border-red-400 hover:text-red-300"
-            >
-              {match.player1?.nickname} −1
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => handle(() => subPoint(match.eventId, match.id, 2))}
-              className="rounded-lg border border-arena-line px-3 py-1.5 text-xs text-slate-400 hover:border-red-400 hover:text-red-300"
-            >
-              {match.player2?.nickname} −1
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              handle(
+                () => undoLastPoint(match.eventId, match.id),
+                () => beepUndo()
+              )
+            }
+            className="mx-auto mt-3 block rounded-lg border border-arena-line px-4 py-2 text-xs text-slate-400 transition hover:border-gold hover:text-gold"
+          >
+            ↩ 復原上一筆計分（誤判修正）
+          </button>
         </div>
       ) : (
         <>
@@ -209,18 +206,51 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
             avatar={match.player1?.avatar ?? "❔"}
             accent="cyan"
             disabled={pending || !ready}
-            onAdd={(p) => handle(() => addPoint(match.eventId, match.id, 1, p))}
-            onSub={() => handle(() => subPoint(match.eventId, match.id, 1))}
+            onAdd={(p) =>
+              handle(
+                () => addPoint(match.eventId, match.id, 1, p),
+                () => beepScore(1, p)
+              )
+            }
+            onSub={() =>
+              handle(
+                () => addPoint(match.eventId, match.id, 1, -1),
+                () => beepUndo()
+              )
+            }
           />
           <PointRow
             label={match.player2?.nickname ?? "選手 2"}
             avatar={match.player2?.avatar ?? "❔"}
             accent="violet"
             disabled={pending || !ready}
-            onAdd={(p) => handle(() => addPoint(match.eventId, match.id, 2, p))}
-            onSub={() => handle(() => subPoint(match.eventId, match.id, 2))}
+            onAdd={(p) =>
+              handle(
+                () => addPoint(match.eventId, match.id, 2, p),
+                () => beepScore(2, p)
+              )
+            }
+            onSub={() =>
+              handle(
+                () => addPoint(match.eventId, match.id, 2, -1),
+                () => beepUndo()
+              )
+            }
           />
-          <p className="mt-3 text-center text-xs text-slate-500">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              handle(
+                () => undoLastPoint(match.eventId, match.id),
+                () => beepUndo()
+              )
+            }
+            className="mt-3 w-full rounded-lg border border-arena-line py-2 text-xs text-slate-500 transition hover:border-gold hover:text-gold disabled:opacity-40"
+          >
+            ↩ 復原上一筆計分
+          </button>
+          <p className="mt-2 text-center text-xs text-slate-500">
             先取得 <b className="text-cyanx">{WIN_POINTS} 分</b>{" "}
             者獲勝・點按即計分
           </p>
