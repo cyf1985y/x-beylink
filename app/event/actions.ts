@@ -12,6 +12,7 @@ import {
   formatTaipei,
   isPlayerBanned,
   isRegistrationClosed,
+  registrationDeadlineOf,
 } from "@/lib/events";
 import { pushToPlayers } from "@/lib/push";
 
@@ -31,14 +32,36 @@ async function loadOwnedPlayer(
   return data;
 }
 
-/** 報名 RPC 的錯誤碼對應訊息 */
+/**
+ * 報名 RPC 的錯誤碼對應訊息。
+ * `registration_closed` 不放在這裡——它要附上實際截止時間，見 closedMessage()。
+ */
 const REGISTER_ERROR_MESSAGES: Record<string, string> = {
   event_not_found: "找不到賽事",
   event_closed: "此賽事目前不開放報名",
-  registration_closed: `報名已截止（開賽前 ${REGISTRATION_CLOSE_HOURS} 小時），對戰表已抽出`,
   bracket_drawn: "對戰表已經抽出，本場報名已關閉",
   already_registered: "這位選手已經報名了",
 };
+
+/**
+ * 報名截止的訊息。只在確實截止時才多查一次賽事，把實際截止時間告訴玩家
+ * （「已於 8/7 22:07 截止」比單純「已截止」有用得多）。
+ * 注意不要宣稱「對戰表已抽出」——截止與抽籤是兩件事，抽籤由頁面載入或
+ * cron 觸發，截止當下可能還沒抽。真的抽出時 RPC 會回 bracket_drawn。
+ */
+async function closedMessage(eventId: string): Promise<string> {
+  const fallback = `報名已截止（開賽前 ${REGISTRATION_CLOSE_HOURS} 小時）`;
+  const { data: timing } = await supabaseAdmin()
+    .from("events")
+    .select("starts_at,registration_deadline")
+    .eq("id", eventId)
+    .maybeSingle<Pick<DbEvent, "starts_at" | "registration_deadline">>();
+  if (!timing) return fallback;
+  const deadline = formatTaipei(
+    registrationDeadlineOf(timing).toISOString()
+  );
+  return `報名已於 ${deadline} 截止（開賽前 ${REGISTRATION_CLOSE_HOURS} 小時）`;
+}
 
 /**
  * 報名：名額內 ok，滿了進候補；停權中不可報名。
@@ -87,6 +110,9 @@ export async function registerPlayer(
   }
 
   if (!data.ok) {
+    if (data.error_code === "registration_closed") {
+      return { ok: false, error: await closedMessage(eventId) };
+    }
     return {
       ok: false,
       error:

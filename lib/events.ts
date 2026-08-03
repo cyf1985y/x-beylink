@@ -74,15 +74,18 @@ export const FREE_CANCEL_HOURS = 72;
 /** 報名截止：開賽前幾小時（寫死，之後自動抽籤產生對戰表） */
 export const REGISTRATION_CLOSE_HOURS = 2;
 
+/** 判斷報名截止只需要這兩個欄位，讓呼叫端可以只撈需要的欄位 */
+type EventTiming = Pick<DbEvent, "starts_at" | "registration_deadline">;
+
 /** 報名截止時間（舊資料沒有欄位時，由開賽時間回推） */
-export function registrationDeadlineOf(event: DbEvent): Date {
+export function registrationDeadlineOf(event: EventTiming): Date {
   if (event.registration_deadline) return new Date(event.registration_deadline);
   return new Date(
     new Date(event.starts_at).getTime() - REGISTRATION_CLOSE_HOURS * 3600_000
   );
 }
 
-export function isRegistrationClosed(event: DbEvent): boolean {
+export function isRegistrationClosed(event: EventTiming): boolean {
   return registrationDeadlineOf(event) <= new Date();
 }
 
