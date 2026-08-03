@@ -40,39 +40,32 @@ async function loadEvents(): Promise<Array<DbEvent & { okCount: number }>> {
 export default async function HomePage() {
   const [session, events] = await Promise.all([getSession(), loadEvents()]);
 
+  const tiles = [
+    { href: "/me", icon: "🧑‍🚀", label: "選手檔案", desc: "建立與管理選手" },
+    { href: "/records", icon: "🏆", label: "生涯戰績", desc: "獎盃與出席紀錄" },
+    { href: "/registrations", icon: "🎟️", label: "已報名賽事", desc: "報名狀態與憑證" },
+    { href: "#events", icon: "🏟️", label: "近期賽事", desc: "找比賽、揪團開打" },
+  ];
+
   return (
     <main className="mx-auto max-w-md px-4 pb-8">
-      {/* Hero */}
-      <section className="relative pt-10 text-center">
-        <div className="mx-auto w-fit animate-floaty">
-          <LogoMark size={96} />
-        </div>
-        <h1 className="mt-4 text-4xl font-black italic tracking-wide">
-          陀螺<span className="text-gradient text-glow">集結</span>
-        </h1>
-        <p className="mt-1 font-num text-sm tracking-[0.35em] text-slate-500">
-          X-BEYLINK
-        </p>
-        <p className="mt-3 text-sm text-slate-300">
-          揪團開打・QR 報到・即時對戰表・數位獎盃
-        </p>
-        {!session && (
+      {/* 功能導航 */}
+      <section className="grid grid-cols-2 gap-3 pt-6">
+        {tiles.map((t) => (
           <Link
-            href="/login"
-            className="btn-x mt-6 bg-[#06C755] !bg-none px-10 text-white shadow-glow"
+            key={t.label}
+            href={t.href}
+            className="card-x p-4 text-center transition hover:-translate-y-0.5 hover:border-cyanx/60 hover:shadow-glow"
           >
-            LINE 登入，加入戰局
+            <span className="text-3xl">{t.icon}</span>
+            <p className="mt-1.5 font-black">{t.label}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">{t.desc}</p>
           </Link>
-        )}
-        {session && (
-          <Link href="/me" className="btn-x mt-6 px-10">
-            我的選手檔案 →
-          </Link>
-        )}
+        ))}
       </section>
 
       {/* 賽事列表 */}
-      <section className="mt-12">
+      <section id="events" className="mt-10 scroll-mt-20">
         <h2 className="h-x">近期賽事</h2>
         <div className="mt-4 space-y-4">
           {events.length === 0 && (
@@ -133,6 +126,30 @@ export default async function HomePage() {
             );
           })}
         </div>
+      </section>
+
+      {/* 品牌區（移到最下方） */}
+      <section className="relative mt-16 border-t border-arena-line/40 pt-10 text-center">
+        <div className="mx-auto w-fit animate-floaty">
+          <LogoMark size={80} />
+        </div>
+        <h1 className="mt-4 text-3xl font-black italic tracking-wide">
+          陀螺<span className="text-gradient text-glow">集結</span>
+        </h1>
+        <p className="mt-1 font-num text-xs tracking-[0.35em] text-slate-500">
+          X-BEYLINK
+        </p>
+        <p className="mt-3 text-sm text-slate-400">
+          揪團開打・QR 報到・即時對戰表・數位獎盃
+        </p>
+        {!session && (
+          <Link
+            href="/login"
+            className="btn-x mt-6 bg-[#06C755] !bg-none px-10 text-white shadow-glow"
+          >
+            LINE 登入，加入戰局
+          </Link>
+        )}
       </section>
     </main>
   );
