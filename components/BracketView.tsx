@@ -30,6 +30,8 @@ export type ViewMatch = {
   player1: ViewPlayer | null;
   player2: ViewPlayer | null;
   winnerId: string | null;
+  score1: number;
+  score2: number;
 };
 
 function WinnerButton({ disabled }: { disabled?: boolean }) {
@@ -54,6 +56,7 @@ function PlayerRow({
   isWinner,
   decided,
   interactive,
+  score,
 }: {
   eventId: string;
   matchId: string;
@@ -61,6 +64,7 @@ function PlayerRow({
   isWinner: boolean;
   decided: boolean;
   interactive: boolean;
+  score: number;
 }) {
   const [, formAction] = useFormState(reportWinner, initialState);
   const absent = !!player && !player.checkedIn;
@@ -86,7 +90,10 @@ function PlayerRow({
           未報到
         </span>
       )}
-      {isWinner && <span className="ml-auto text-xs">✔</span>}
+      {score > 0 && (
+        <span className="ml-auto font-num text-sm font-bold">{score}</span>
+      )}
+      {isWinner && <span className="ml-1 text-xs">✔</span>}
       {interactive && player && !decided && <WinnerButton />}
     </div>
   );
@@ -163,6 +170,7 @@ function MatchCard({
         isWinner={decided && m.winnerId === m.player1?.id}
         decided={decided}
         interactive={interactive}
+        score={m.score1}
       />
       <div className="my-0.5 flex items-center gap-2 px-2">
         <span className="h-px flex-1 bg-arena-line" />
@@ -178,6 +186,7 @@ function MatchCard({
         isWinner={decided && m.winnerId === m.player2?.id}
         decided={decided}
         interactive={interactive}
+        score={m.score2}
       />
     </div>
   );

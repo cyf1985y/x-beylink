@@ -6,13 +6,25 @@ export type DbMatch = {
   id: string;
   event_id: string;
   round: number; // 1 起算，最後一輪 = 決賽
-  slot: number; // 該輪第幾場（0 起算）
+  slot: number; // 該輪第幾場（0 起算）＝ 第幾決鬥台
   kind: "normal" | "third"; // third = 季軍戰
   player1_id: string | null;
   player2_id: string | null;
   winner_id: string | null;
+  score1: number;
+  score2: number;
   created_at: string;
 };
+
+/** BEYBLADE X 計分規則：先取得 4 分者獲勝 */
+export const WIN_POINTS = 4;
+
+/** 得分方式（官方 X 規則） */
+export const FINISH_TYPES = [
+  { points: 1, label: "Spin", zh: "Spin Finish" },
+  { points: 2, label: "Over / Burst", zh: "Over・Burst Finish" },
+  { points: 3, label: "Xtreme", zh: "Xtreme Finish" },
+] as const;
 
 /** 決賽輪數：bracketSize = 2^rounds */
 export function totalRounds(bracketSize: number): number {
@@ -81,6 +93,8 @@ export function buildBracket(
       player1_id: p1,
       player2_id: p2,
       winner_id: winner,
+      score1: 0,
+      score2: 0,
     });
   }
 
@@ -100,6 +114,8 @@ export function buildBracket(
         player1_id: p1,
         player2_id: p2,
         winner_id: null,
+        score1: 0,
+        score2: 0,
       });
     }
     prev = cur;
@@ -115,6 +131,8 @@ export function buildBracket(
       player1_id: null,
       player2_id: null,
       winner_id: null,
+      score1: 0,
+      score2: 0,
     });
   }
 

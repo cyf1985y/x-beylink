@@ -58,6 +58,8 @@ export async function loadBracketView(
     player1: toP(m.player1_id),
     player2: toP(m.player2_id),
     winnerId: m.winner_id,
+    score1: m.score1,
+    score2: m.score2,
   }));
   return { matches, view };
 }

@@ -18,6 +18,7 @@ import {
   type SettleRow,
   type IssuedTrophy,
 } from "@/components/SettlePanel";
+import { HostTabBar } from "@/components/HostTabBar";
 
 export const dynamic = "force-dynamic";
 
@@ -117,16 +118,24 @@ export default async function HostEventPage({
         </p>
       </div>
 
-      <div className="mt-4">
+      <div id="checkin" className="mt-4 scroll-mt-20">
         <CheckinScanner eventId={event.id} />
       </div>
 
-      <Link
-        href={`/host/event/${event.id}/bracket`}
-        className="mt-3 block rounded-2xl border border-violetx/40 bg-violetx/10 p-4 text-center font-bold text-violetx transition hover:bg-violetx/20"
-      >
-        ⚔️ 對戰表（產生賽程／記錄勝負／依結果結算）→
-      </Link>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link
+          href={`/referee/event/${event.id}`}
+          className="rounded-2xl border border-cyanx/40 bg-cyanx/10 p-4 text-center font-bold text-cyanx transition hover:bg-cyanx/20"
+        >
+          ⚖️ 裁判計分模式
+        </Link>
+        <Link
+          href={`/host/event/${event.id}/bracket`}
+          className="rounded-2xl border border-violetx/40 bg-violetx/10 p-4 text-center font-bold text-violetx transition hover:bg-violetx/20"
+        >
+          ⚔️ 對戰表／結算
+        </Link>
+      </div>
 
       <section className="mt-6">
         <h2 className="font-bold text-slate-200">報名名單（{okRows.length}）</h2>
@@ -184,6 +193,7 @@ export default async function HostEventPage({
           </div>
         </section>
       )}
+      <HostTabBar eventId={event.id} active="manage" />
     </main>
   );
 }

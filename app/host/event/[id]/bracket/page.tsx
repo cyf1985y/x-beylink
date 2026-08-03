@@ -17,6 +17,7 @@ import {
 } from "@/components/BracketView";
 import { autoGenerateBrackets } from "@/lib/autoBracket";
 import { RefereePanel, type RefereeRow } from "@/components/RefereePanel";
+import { HostTabBar } from "@/components/HostTabBar";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +140,7 @@ export default async function HostBracketPage({
           </>
         )}
       </div>
+      <HostTabBar eventId={event.id} active="settle" />
     </main>
   );
 }
