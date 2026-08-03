@@ -59,7 +59,7 @@ export default async function HomePage() {
         {!session && (
           <Link
             href="/login"
-            className="btn-x mt-6 animate-glow-pulse bg-[#06C755] !bg-none px-10 text-white"
+            className="btn-x mt-6 bg-[#06C755] !bg-none px-10 text-white shadow-glow"
           >
             LINE 登入，加入戰局
           </Link>

@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { getSession } from "@/lib/session";
-import { supabaseAdmin } from "@/lib/supabase";
-import { getOrganizerForUser } from "@/lib/organizer";
 import { SiteHeader, SiteFooter } from "@/components/Brand";
 import "./globals.css";
 
@@ -18,15 +16,8 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // 導覽列只讀 cookie session，不查資料庫（效能：每頁省一次 DB 往返）
   const session = await getSession();
-  let isOrganizer = false;
-  if (session) {
-    try {
-      isOrganizer = !!(await getOrganizerForUser(supabaseAdmin(), session.uid));
-    } catch {
-      isOrganizer = false;
-    }
-  }
 
   return (
     <html lang="zh-Hant-TW">
@@ -44,7 +35,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="font-sans text-slate-100 antialiased">
-        <SiteHeader loggedIn={!!session} isOrganizer={isOrganizer} />
+        <SiteHeader loggedIn={!!session} />
         <div className="min-h-[70vh]">{children}</div>
         <SiteFooter />
       </body>

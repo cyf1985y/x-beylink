@@ -25,33 +25,32 @@ export default async function EventPage({
   params: { id: string };
 }) {
   const db = supabaseAdmin();
-  await settleDueEvents(db);
-  const { data: event } = await db
-    .from("events")
-    .select("*")
-    .eq("id", params.id)
-    .single<DbEvent>();
+  // 效能：結算補跑與主查詢並行；session 讀 cookie 不佔 DB
+  const [, session, { data: event }] = await Promise.all([
+    settleDueEvents(db),
+    getSession(),
+    db.from("events").select("*").eq("id", params.id).single<DbEvent>(),
+  ]);
   if (!event) notFound();
 
-  const session = await getSession();
-
-  const { data: organizer } = await db
-    .from("organizers")
-    .select("name,verified,score,events_held")
-    .eq("id", event.organizer_id)
-    .single<{
-      name: string;
-      verified: boolean;
-      score: number;
-      events_held: number;
-    }>();
-
-  const { data: regs } = await db
-    .from("registrations")
-    .select("*")
-    .eq("event_id", event.id)
-    .neq("status", "cancelled")
-    .returns<DbRegistration[]>();
+  const [{ data: organizer }, { data: regs }] = await Promise.all([
+    db
+      .from("organizers")
+      .select("name,verified,score,events_held")
+      .eq("id", event.organizer_id)
+      .single<{
+        name: string;
+        verified: boolean;
+        score: number;
+        events_held: number;
+      }>(),
+    db
+      .from("registrations")
+      .select("*")
+      .eq("event_id", event.id)
+      .neq("status", "cancelled")
+      .returns<DbRegistration[]>(),
+  ]);
   const okCount = (regs ?? []).filter((r) => r.status === "ok").length;
   const waitCount = (regs ?? []).filter((r) => r.status === "waitlist").length;
 

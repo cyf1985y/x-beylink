@@ -73,15 +73,9 @@ export function Wordmark({ big = false }: { big?: boolean }) {
   );
 }
 
-export function SiteHeader({
-  loggedIn,
-  isOrganizer,
-}: {
-  loggedIn: boolean;
-  isOrganizer: boolean;
-}) {
+export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-arena-line/60 bg-arena-deep/70 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-arena-line/60 bg-arena-deep/95">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-2.5">
         <Link href="/" className="flex items-center gap-2">
           <LogoMark size={30} />
@@ -90,14 +84,12 @@ export function SiteHeader({
         <nav className="flex items-center gap-1.5 text-sm">
           {loggedIn ? (
             <>
-              {isOrganizer && (
-                <Link
-                  href="/host"
-                  className="rounded-lg px-3 py-1.5 text-slate-400 transition hover:bg-arena-card hover:text-violetx"
-                >
-                  主辦
-                </Link>
-              )}
+              <Link
+                href="/host"
+                className="rounded-lg px-3 py-1.5 text-slate-400 transition hover:bg-arena-card hover:text-violetx"
+              >
+                主辦
+              </Link>
               <Link
                 href="/me"
                 className="rounded-lg border border-cyanx/40 px-3 py-1.5 font-bold text-cyanx transition hover:bg-cyanx/10"
