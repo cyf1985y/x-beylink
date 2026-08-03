@@ -6,6 +6,7 @@ import { requireScorer } from "@/lib/scorer";
 import { EVENT_STATUS_LABEL, formatTaipei } from "@/lib/events";
 import { roundName, finalRoundOf, WIN_POINTS } from "@/lib/bracket";
 import { loadBracketView } from "@/lib/bracketView";
+import { autoGenerateBrackets } from "@/lib/autoBracket";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 import { BracketView } from "@/components/BracketView";
 
@@ -25,6 +26,7 @@ export default async function RefereeEventPage({
   const event = auth.event;
 
   const db = supabaseAdmin();
+  await autoGenerateBrackets(db); // 報名截止即自動抽籤（補跑）
   const { matches, view } = await loadBracketView(db, event.id);
   const locked = event.status === "done";
   const finalRound = matches.length ? finalRoundOf(matches) : 1;
