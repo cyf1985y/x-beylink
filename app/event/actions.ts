@@ -65,6 +65,14 @@ export async function registerPlayer(
       error: `報名已於 ${formatTaipei(registrationDeadlineOf(event).toISOString())} 截止（開賽前 ${REGISTRATION_CLOSE_HOURS} 小時），對戰表已抽出`,
     };
   }
+  // 對戰表一旦抽出就關閉報名，避免有人被排除在賽程外
+  const { count: bracketCount } = await db
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+  if ((bracketCount ?? 0) > 0) {
+    return { ok: false, error: "對戰表已經抽出，本場報名已關閉" };
+  }
 
   // 既有報名紀錄（unique(event_id, player_id)）
   const { data: existing } = await db

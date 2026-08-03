@@ -77,9 +77,17 @@ export default async function EventPage({
     });
   }
 
+  const { count: bracketCount } = await db
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", event.id);
+  const hasBracket = (bracketCount ?? 0) > 0;
+
+  // 報名關閉條件：賽事非開放中、已過報名截止、或對戰表已抽出
   const closed =
     (event.status !== "open" && event.status !== "confirmed") ||
-    isRegistrationClosed(event);
+    isRegistrationClosed(event) ||
+    hasBracket;
   const progress = Math.min(
     100,
     Math.round((okCount / event.min_required) * 100)
@@ -191,9 +199,20 @@ export default async function EventPage({
 
       <Link
         href={`/event/${event.id}/bracket`}
-        className="mt-4 block rounded-2xl border border-violetx/40 bg-violetx/10 p-3 text-center text-sm font-bold text-violetx transition hover:bg-violetx/20"
+        className={`mt-4 block rounded-2xl border p-3 text-center text-sm font-black transition ${
+          hasBracket
+            ? "border-red-400/50 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+            : "border-violetx/40 bg-violetx/10 text-violetx hover:bg-violetx/20"
+        }`}
       >
-        ⚔️ 看對戰表（比賽日即時晉級圖）→
+        {hasBracket ? (
+          <>
+            <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-red-400 align-middle" />
+            對戰表已公布・看即時晉級圖 →
+          </>
+        ) : (
+          <>⚔️ 對戰表（報名截止後自動抽籤）→</>
+        )}
       </Link>
 
       <section className="mt-6">

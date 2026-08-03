@@ -305,8 +305,11 @@ export function GenerateBracketButton({ eventId }: { eventId: string }) {
     <form action={formAction}>
       <input type="hidden" name="event_id" value={eventId} />
       <button className="w-full rounded-xl bg-violetx px-4 py-3 font-bold text-white transition hover:brightness-110">
-        ⚔️ 產生對戰表（從已報到選手隨機配對）
+        ⚔️ 提前抽籤產生對戰表
       </button>
+      <p className="mt-2 text-center text-xs text-gold">
+        ⚠️ 提前抽籤會<b>立即關閉報名</b>，還沒報名的人就進不來了
+      </p>
       {state.error && (
         <p className="mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {state.error}
