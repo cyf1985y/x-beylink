@@ -83,7 +83,7 @@ export function ScoreboardLive({
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-arena-deep p-4">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-arena-deep p-4">
       <header className="text-center">
         <p className="text-[2.4vh] font-black tracking-widest text-cyanx">
           {roundLabel}・第 {tableNo} 決鬥台
