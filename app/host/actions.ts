@@ -358,6 +358,8 @@ async function performSettlement(
   for (const reg of okRegs) {
     const rank = ranks.get(reg.id);
     if (!rank) continue;
+    // 沒報到就沒有名次與獎盃（對戰表上是被對手輪空晉級，不算成績）
+    if (!reg.checked_in_at) continue;
     await db.from("results").upsert(
       { event_id: eventId, player_id: reg.player_id, final_rank: rank },
       { onConflict: "event_id,player_id" }
