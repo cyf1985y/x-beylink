@@ -10,6 +10,7 @@ import {
   formatTaipei,
 } from "@/lib/events";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
+import { TicketWatcher } from "@/components/TicketWatcher";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,10 @@ export default async function TicketPage({
             <p className="mt-3 text-sm text-slate-400">
               到場後出示此 QR Code 給主辦方掃描報到
             </p>
+            <p className="mt-1 text-xs text-slate-500">
+              掃描成功後這個畫面會自動跳到對戰表
+            </p>
+            <TicketWatcher regId={reg.id} eventId={event.id} />
           </>
         ) : (
           <div className="mt-6 rounded-xl border border-gold/50 bg-gold/10 p-6">

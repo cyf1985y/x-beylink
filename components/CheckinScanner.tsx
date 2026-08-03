@@ -1,12 +1,53 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import jsQR from "jsqr";
 import { checkinByToken, type CheckinResult } from "@/app/host/actions";
 
 type ScanFeedback = { kind: "ok" | "already" | "error"; text: string } | null;
 
+/** 掃碼音效：成功嗶一聲（高音）、失敗低音兩短聲；並震動 */
+function playBeep(ok: boolean) {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    const ctx = new Ctx();
+    const tone = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        ctx.currentTime + start + dur
+      );
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur);
+    };
+    if (ok) {
+      tone(1320, 0, 0.18);
+    } else {
+      tone(220, 0, 0.12);
+      tone(220, 0.18, 0.12);
+    }
+    setTimeout(() => ctx.close(), 800);
+  } catch {
+    /* 不支援音效就略過 */
+  }
+  try {
+    navigator.vibrate?.(ok ? 120 : [80, 60, 80]);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function CheckinScanner({ eventId }: { eventId: string }) {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -35,13 +76,17 @@ export function CheckinScanner({ eventId }: { eventId: string }) {
       try {
         const result: CheckinResult = await checkinByToken(eventId, raw);
         if (result.ok && result.already) {
+          playBeep(false);
           setFeedback({
             kind: "already",
             text: `${result.nickname} 剛才已經報到過了`,
           });
         } else if (result.ok) {
+          playBeep(true);
           setFeedback({ kind: "ok", text: `✅ ${result.nickname} 報到成功！` });
+          router.refresh(); // 報到名單即時更新
         } else {
+          playBeep(false);
           setFeedback({ kind: "error", text: result.error ?? "報到失敗" });
         }
       } finally {
@@ -139,15 +184,20 @@ export function CheckinScanner({ eventId }: { eventId: string }) {
 
       {feedback && (
         <p
-          className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
+          className={`mt-3 rounded-xl border-2 px-3 py-3 text-center text-base font-black ${
             feedback.kind === "ok"
-              ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
+              ? "animate-glow-pulse border-emerald-400/70 bg-emerald-400/15 text-emerald-300"
               : feedback.kind === "already"
-                ? "border-gold/50 bg-gold/10 text-gold"
-                : "border-red-500/40 bg-red-500/10 text-red-300"
+                ? "border-gold/60 bg-gold/10 text-gold"
+                : "border-red-500/60 bg-red-500/10 text-red-300"
           }`}
         >
           {feedback.text}
+          {feedback.kind === "ok" && (
+            <span className="mt-0.5 block text-xs font-normal text-slate-400">
+              名單已更新，可繼續掃下一位
+            </span>
+          )}
         </p>
       )}
     </div>
