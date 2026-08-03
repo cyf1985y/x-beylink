@@ -238,19 +238,20 @@ export async function createEvent(
   // 名額上限依等級鎖死（銅 16／銀 32／金 64），不接受表單值
   const capacity = TIERS[tier].capacity;
 
-  // 成行判定時間：開賽前 24 小時；若開賽在 26 小時內，改為開賽前 2 小時
-  const dayBefore = startsAt.getTime() - 24 * 3600_000;
-  const confirmDeadline = new Date(
-    dayBefore > Date.now() + 2 * 3600_000
-      ? dayBefore
-      : startsAt.getTime() - 2 * 3600_000
-  );
   // 報名截止：開賽前 2 小時（寫死），截止後系統自動抽籤產生對戰表
   const registrationDeadline = new Date(
     Math.max(
       startsAt.getTime() - REGISTRATION_CLOSE_HOURS * 3600_000,
       Date.now() + 10 * 60_000
     )
+  );
+  // 成行判定：開賽前 24 小時先給大家一個確定答案；若來不及（當天臨時開賽），
+  // 就與報名截止同時判定。判定時間永遠不晚於報名截止。
+  const dayBefore = startsAt.getTime() - 24 * 3600_000;
+  const confirmDeadline = new Date(
+    dayBefore > Date.now()
+      ? Math.min(dayBefore, registrationDeadline.getTime())
+      : registrationDeadline.getTime()
   );
 
   const db = supabaseAdmin();

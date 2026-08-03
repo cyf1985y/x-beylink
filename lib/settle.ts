@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { DbEvent, formatTaipei } from "@/lib/events";
+import { DbEvent, formatTaipei, registrationDeadlineOf } from "@/lib/events";
 import { pushToPlayers } from "@/lib/push";
 
 /**
@@ -11,11 +11,12 @@ import { pushToPlayers } from "@/lib/push";
 export async function settleDueEvents(
   db: SupabaseClient
 ): Promise<Array<{ id: string; title: string; to: "confirmed" | "void" }>> {
+  const now = new Date();
   const { data: due } = await db
     .from("events")
     .select("*")
     .eq("status", "open")
-    .lte("confirm_deadline", new Date().toISOString())
+    .lte("confirm_deadline", now.toISOString())
     .returns<DbEvent[]>();
 
   const results: Array<{ id: string; title: string; to: "confirmed" | "void" }> =
@@ -26,7 +27,11 @@ export async function settleDueEvents(
       .select("id", { count: "exact", head: true })
       .eq("event_id", event.id)
       .eq("status", "ok");
-    const to = (count ?? 0) >= event.min_required ? "confirmed" : "void";
+    const reached = (count ?? 0) >= event.min_required;
+
+    // 達標即確認開打；未達標時，只要報名還沒截止就繼續揪團（不提前判流局）
+    if (!reached && registrationDeadlineOf(event) > now) continue;
+    const to = reached ? "confirmed" : "void";
     await db.from("events").update({ status: to }).eq("id", event.id);
     results.push({ id: event.id, title: event.title, to });
 
