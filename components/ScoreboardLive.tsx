@@ -142,8 +142,9 @@ export function ScoreboardLive({
     );
   };
 
+  /** 該側的 ＋1／＋2／＋3 橫排一列 */
   const PointButtons = ({ side }: { side: 1 | 2 }) => (
-    <div className="flex flex-1 flex-col gap-1.5">
+    <div className="flex flex-1 gap-2">
       {FINISH_TYPES.map((f) => (
         <button
           key={f.label}
@@ -155,30 +156,41 @@ export function ScoreboardLive({
               () => beepScore(side, f.points)
             )
           }
-          className={`rounded-xl border-2 py-[1.4vh] text-center transition active:scale-95 disabled:opacity-30 ${
+          className={`flex-1 rounded-xl border-2 py-[1.8vh] text-center transition active:scale-95 disabled:opacity-30 ${
             side === 1
               ? "border-cyanx/50 bg-cyanx/10 hover:bg-cyanx/25"
               : "border-red-400/50 bg-red-500/10 hover:bg-red-500/25"
           }`}
         >
-          <span className="font-num text-[2.6vh] font-bold">＋{f.points}</span>
-          <span className="ml-1.5 text-[1.5vh] text-slate-400">{f.label}</span>
+          <span className="block font-num text-[3.2vh] font-bold leading-none">
+            ＋{f.points}
+          </span>
+          <span className="mt-0.5 block text-[1.4vh] text-slate-400">
+            {f.label}
+          </span>
         </button>
       ))}
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() =>
-          run(
-            () => addPoint(eventId, matchId, side, -1),
-            () => beepUndo()
-          )
-        }
-        className="rounded-xl border border-arena-line py-[0.8vh] text-[1.4vh] text-slate-500 transition hover:border-red-400 hover:text-red-300 disabled:opacity-30"
-      >
-        −1 犯規
-      </button>
     </div>
+  );
+
+  const MinusButton = ({ side }: { side: 1 | 2 }) => (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() =>
+        run(
+          () => addPoint(eventId, matchId, side, -1),
+          () => beepUndo()
+        )
+      }
+      className={`flex-1 rounded-xl border py-[1vh] text-[1.5vh] transition disabled:opacity-30 ${
+        side === 1
+          ? "border-cyanx/30 text-cyanx/70 hover:border-red-400 hover:text-red-300"
+          : "border-red-400/30 text-red-300/70 hover:border-red-400 hover:text-red-300"
+      }`}
+    >
+      {side === 1 ? "藍方" : "紅方"} −1 犯規
+    </button>
   );
 
   return (
@@ -216,23 +228,29 @@ export function ScoreboardLive({
 
       {canScore ? (
         <>
+          {/* 得分：兩側各一列 ＋1／＋2／＋3 */}
           <div className="flex gap-3">
             <PointButtons side={1} />
             <PointButtons side={2} />
           </div>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              run(
-                () => undoLastPoint(eventId, matchId),
-                () => beepUndo()
-              )
-            }
-            className="mt-2 rounded-xl border border-arena-line py-[1vh] text-[1.6vh] text-slate-400 transition hover:border-gold hover:text-gold disabled:opacity-30"
-          >
-            ↩ 復原上一筆計分
-          </button>
+          {/* 修正：犯規扣分與復原同一列 */}
+          <div className="mt-2 flex gap-2">
+            <MinusButton side={1} />
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                run(
+                  () => undoLastPoint(eventId, matchId),
+                  () => beepUndo()
+                )
+              }
+              className="flex-[1.4] rounded-xl border border-arena-line py-[1vh] text-[1.5vh] text-slate-400 transition hover:border-gold hover:text-gold disabled:opacity-30"
+            >
+              ↩ 復原上一筆計分
+            </button>
+            <MinusButton side={2} />
+          </div>
         </>
       ) : (
         <footer className="text-center text-[1.6vh] text-slate-600">
