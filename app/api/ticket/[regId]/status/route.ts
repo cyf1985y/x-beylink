@@ -30,8 +30,15 @@ export async function GET(
     return new NextResponse("Not Found", { status: 404 });
   }
 
+  // 對戰表是否已產生（決定報到後要跳去哪）
+  const { count: matchCount } = await db
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", reg.event_id);
+
   return NextResponse.json({
     checkedIn: !!reg.checked_in_at,
     eventId: reg.event_id,
+    hasBracket: (matchCount ?? 0) > 0,
   });
 }

@@ -1,40 +1,60 @@
 import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
-import { DbEvent, EVENT_STATUS_LABEL, TIERS, formatTaipei } from "@/lib/events";
+import {
+  DbEvent,
+  EVENT_STATUS_LABEL,
+  TIERS,
+  formatTaipei,
+  registrationDeadlineOf,
+} from "@/lib/events";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 import { LogoMark } from "@/components/Brand";
 import { settleDueEvents } from "@/lib/settle";
+import { autoGenerateBrackets } from "@/lib/autoBracket";
 
 export const dynamic = "force-dynamic";
 
-async function loadEvents(): Promise<Array<DbEvent & { okCount: number }>> {
+async function loadEvents(): Promise<
+  Array<DbEvent & { okCount: number; hasBracket: boolean }>
+> {
   const db = supabaseAdmin();
-  await settleDueEvents(db);
+  await Promise.all([settleDueEvents(db), autoGenerateBrackets(db)]);
+  // 進行中的賽事（開賽後 12 小時內）也留在列表上，方便現場觀戰
   const { data: events } = await db
     .from("events")
     .select("*")
     .in("status", ["open", "confirmed"])
-    .gt("starts_at", new Date().toISOString())
+    .gt("starts_at", new Date(Date.now() - 12 * 3600_000).toISOString())
     .order("starts_at", { ascending: true })
     .returns<DbEvent[]>();
   if (!events || events.length === 0) return [];
 
-  const { data: regs } = await db
-    .from("registrations")
-    .select("event_id")
-    .in(
-      "event_id",
-      events.map((e) => e.id)
-    )
-    .eq("status", "ok")
-    .returns<Array<{ event_id: string }>>();
+  const ids = events.map((e) => e.id);
+  const [{ data: regs }, { data: matches }] = await Promise.all([
+    db
+      .from("registrations")
+      .select("event_id")
+      .in("event_id", ids)
+      .eq("status", "ok")
+      .returns<Array<{ event_id: string }>>(),
+    db
+      .from("matches")
+      .select("event_id")
+      .in("event_id", ids)
+      .returns<Array<{ event_id: string }>>(),
+  ]);
 
   const counts = new Map<string, number>();
   for (const r of regs ?? []) {
     counts.set(r.event_id, (counts.get(r.event_id) ?? 0) + 1);
   }
-  return events.map((e) => ({ ...e, okCount: counts.get(e.id) ?? 0 }));
+  const withBracket = new Set((matches ?? []).map((m) => m.event_id));
+  return events.map((e) => ({
+    ...e,
+    okCount: counts.get(e.id) ?? 0,
+    hasBracket: withBracket.has(e.id),
+  }));
 }
 
 export default async function HomePage() {
@@ -79,24 +99,35 @@ export default async function HomePage() {
               Math.round((e.okCount / e.min_required) * 100)
             );
             const reached = e.okCount >= e.min_required;
+            const live = e.hasBracket;
             return (
-              <Link
+              <div
                 key={e.id}
-                href={`/event/${e.id}`}
                 className="card-x block p-5 transition hover:-translate-y-0.5 hover:border-cyanx/60 hover:shadow-glow-strong"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <TierBadge tier={e.tier} />
-                  <StatusChip
-                    status={e.status}
-                    label={EVENT_STATUS_LABEL[e.status]}
-                  />
-                </div>
-                <h3 className="mt-2.5 text-xl font-black">{e.title}</h3>
-                <p className="mt-1.5 text-sm text-slate-400">
-                  🗓 {formatTaipei(e.starts_at)}｜📍 {e.venue}
-                </p>
-                <div className="mt-4">
+                <Link href={`/event/${e.id}`} className="block">
+                  <div className="flex items-center justify-between gap-2">
+                    <TierBadge tier={e.tier} />
+                    <StatusChip
+                      status={e.status}
+                      label={EVENT_STATUS_LABEL[e.status]}
+                    />
+                  </div>
+                  <h3 className="mt-2.5 text-xl font-black">{e.title}</h3>
+                  <p className="mt-1.5 text-sm text-slate-400">
+                    🗓 {formatTaipei(e.starts_at)}｜📍 {e.venue}
+                  </p>
+                </Link>
+                {live && (
+                  <Link
+                    href={`/event/${e.id}/bracket`}
+                    className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-500/10 py-2 text-sm font-black text-red-300 transition hover:bg-red-500/20"
+                  >
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />
+                    賽事進行中・看即時對戰表 →
+                  </Link>
+                )}
+                <Link href={`/event/${e.id}`} className="mt-4 block">
                   <div className="flex items-end justify-between text-xs text-slate-400">
                     <span className="font-num text-base font-bold text-slate-200">
                       {e.okCount}
@@ -118,11 +149,14 @@ export default async function HomePage() {
                     />
                   </div>
                   <p className="mt-1.5 text-xs text-slate-500">
-                    {TIERS[e.tier].label}需滿 {e.min_required} 人，未達標於{" "}
-                    {formatTaipei(e.confirm_deadline)} 流局
+                    {live
+                      ? "報名已截止，對戰表已抽出"
+                      : `${TIERS[e.tier].label}需滿 ${e.min_required} 人，報名至 ${formatTaipei(
+                          registrationDeadlineOf(e).toISOString()
+                        )} 截止`}
                   </p>
-                </div>
-              </Link>
+                </Link>
+              </div>
             );
           })}
         </div>

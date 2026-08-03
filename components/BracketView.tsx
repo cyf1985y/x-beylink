@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import {
@@ -8,19 +8,27 @@ import {
   undoMatch,
   settleFromBracket,
   generateBracket,
+  regenerateBracket,
   type FormResult,
 } from "@/app/host/actions";
 import { roundName } from "@/lib/bracket";
 
 const initialState: FormResult = { ok: false };
 
+export type ViewPlayer = {
+  id: string;
+  nickname: string;
+  avatar: string;
+  checkedIn: boolean;
+};
+
 export type ViewMatch = {
   id: string;
   round: number;
   slot: number;
   kind: "normal" | "third";
-  player1: { id: string; nickname: string; avatar: string } | null;
-  player2: { id: string; nickname: string; avatar: string } | null;
+  player1: ViewPlayer | null;
+  player2: ViewPlayer | null;
   winnerId: string | null;
 };
 
@@ -49,12 +57,13 @@ function PlayerRow({
 }: {
   eventId: string;
   matchId: string;
-  player: { id: string; nickname: string; avatar: string } | null;
+  player: ViewPlayer | null;
   isWinner: boolean;
   decided: boolean;
   interactive: boolean;
 }) {
   const [, formAction] = useFormState(reportWinner, initialState);
+  const absent = !!player && !player.checkedIn;
 
   const inner = (
     <div
@@ -63,11 +72,20 @@ function PlayerRow({
           ? "bg-cyanx/15 font-black text-cyanx shadow-glow-win"
           : decided
             ? "text-slate-500 line-through decoration-slate-600"
-            : "font-bold text-slate-200"
+            : absent
+              ? "font-bold text-slate-500"
+              : "font-bold text-slate-200"
       }`}
     >
-      <span>{player?.avatar ?? "❔"}</span>
+      <span className={absent && !decided ? "opacity-40" : ""}>
+        {player?.avatar ?? "❔"}
+      </span>
       <span className="truncate">{player?.nickname ?? "（待定）"}</span>
+      {absent && !decided && (
+        <span className="shrink-0 rounded border border-red-500/40 px-1 text-[9px] text-red-300">
+          未報到
+        </span>
+      )}
       {isWinner && <span className="ml-auto text-xs">✔</span>}
       {interactive && player && !decided && <WinnerButton />}
     </div>
@@ -247,6 +265,34 @@ export function SettleFromBracketButton({ eventId }: { eventId: string }) {
       {state.ok && (
         <p className="mt-2 rounded-lg border border-emerald-400/50 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-300">
           ✅ 結算完成，獎盃已發放！
+        </p>
+      )}
+    </form>
+  );
+}
+
+export function RegenerateBracketButton({ eventId }: { eventId: string }) {
+  const [state, formAction] = useFormState(regenerateBracket, initialState);
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <form action={formAction} className="mt-4 text-center">
+      <input type="hidden" name="event_id" value={eventId} />
+      {confirming ? (
+        <button className="rounded-xl border border-red-400/60 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/10">
+          確定重抽？（用實到名單重排，現有配對會作廢）
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="text-xs text-slate-500 underline hover:text-slate-300"
+        >
+          缺席太多？用實到名單重新抽籤
+        </button>
+      )}
+      {state.error && (
+        <p className="mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {state.error}
         </p>
       )}
     </form>

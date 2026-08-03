@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { settleDueEvents } from "@/lib/settle";
+import { autoGenerateBrackets } from "@/lib/autoBracket";
 import { pushToPlayers } from "@/lib/push";
 import { DbEvent, formatTaipei } from "@/lib/events";
 
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
   }
   const db = supabaseAdmin();
   const results = await settleDueEvents(db);
+  const brackets = await autoGenerateBrackets(db);
 
   // 賽前提醒
   let reminded = 0;
@@ -45,5 +47,10 @@ export async function GET(req: NextRequest) {
     reminded += playerIds.length;
   }
 
-  return NextResponse.json({ processed: results.length, results, reminded });
+  return NextResponse.json({
+    processed: results.length,
+    results,
+    brackets,
+    reminded,
+  });
 }

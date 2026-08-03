@@ -16,6 +16,7 @@ export function TicketWatcher({
 }) {
   const router = useRouter();
   const [done, setDone] = useState(false);
+  const [hasBracket, setHasBracket] = useState(false);
 
   useEffect(() => {
     let stop = false;
@@ -25,10 +26,12 @@ export function TicketWatcher({
           cache: "no-store",
         });
         if (!res.ok) return;
-        const data: { checkedIn: boolean } = await res.json();
+        const data: { checkedIn: boolean; hasBracket: boolean } =
+          await res.json();
         if (data.checkedIn && !stop) {
           stop = true;
           clearInterval(timer);
+          setHasBracket(data.hasBracket);
           setDone(true);
           try {
             navigator.vibrate?.([100, 60, 100]);
@@ -36,7 +39,10 @@ export function TicketWatcher({
             /* ignore */
           }
           setTimeout(() => {
-            router.replace(`/event/${eventId}/bracket`);
+            // 對戰表已產生就直接看晉級圖，否則回賽事頁等待
+            router.replace(
+              data.hasBracket ? `/event/${eventId}/bracket` : `/event/${eventId}`
+            );
           }, 1800);
         }
       } catch {
@@ -55,7 +61,9 @@ export function TicketWatcher({
       <div className="animate-glow-pulse rounded-3xl border-2 border-emerald-400/70 bg-arena-card px-10 py-12 text-center shadow-glow-strong">
         <p className="text-6xl">✅</p>
         <p className="mt-4 text-2xl font-black text-emerald-300">報到成功！</p>
-        <p className="mt-2 text-sm text-slate-400">正在前往對戰表…</p>
+        <p className="mt-2 text-sm text-slate-400">
+          {hasBracket ? "正在前往對戰表…" : "對戰表尚未公布，先回賽事頁…"}
+        </p>
       </div>
     </div>
   );

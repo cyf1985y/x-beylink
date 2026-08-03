@@ -5,6 +5,7 @@ import { DbEvent, EVENT_STATUS_LABEL, formatTaipei } from "@/lib/events";
 import { loadBracketView } from "@/lib/bracketView";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 import { BracketView } from "@/components/BracketView";
+import { autoGenerateBrackets } from "@/lib/autoBracket";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function PublicBracketPage({
     .single<DbEvent>();
   if (!event) notFound();
 
+  await autoGenerateBrackets(db);
   const { view } = await loadBracketView(db, event.id);
 
   return (
@@ -50,7 +52,9 @@ export default async function PublicBracketPage({
       <div className="mt-5">
         {view.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-arena-line p-8 text-center text-sm text-slate-500">
-            對戰表還沒公布——報到截止後由主辦方產生，敬請期待！
+            對戰表還沒公布——
+            <span className="text-cyanx">報名截止（開賽前 2 小時）</span>
+            會自動抽籤，敬請期待！
           </div>
         ) : (
           <BracketView

@@ -9,6 +9,8 @@ import {
   TIERS,
   formatTaipei,
   isPlayerBanned,
+  isRegistrationClosed,
+  registrationDeadlineOf,
 } from "@/lib/events";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 import {
@@ -77,7 +79,7 @@ export default async function EventPage({
 
   const closed =
     (event.status !== "open" && event.status !== "confirmed") ||
-    new Date(event.starts_at) <= new Date();
+    isRegistrationClosed(event);
   const progress = Math.min(
     100,
     Math.round((okCount / event.min_required) * 100)
@@ -144,10 +146,15 @@ export default async function EventPage({
             />
           </div>
           <p className="mt-1.5 text-xs text-slate-500">
-            {TIERS[event.tier].label}賽事需滿 {event.min_required}{" "}
-            人才成團；若 {formatTaipei(event.confirm_deadline)}{" "}
-            前未達標將流局，所有人信譽不受影響。開賽前 72
-            小時內取消將記 0.5 點信譽點數。
+            {TIERS[event.tier].label}賽事需滿 {event.min_required} 人才成團；若{" "}
+            {formatTaipei(event.confirm_deadline)}{" "}
+            前未達標將流局（信譽不受影響）。
+            <b className="text-slate-400">
+              報名至 {formatTaipei(registrationDeadlineOf(event).toISOString())}{" "}
+              截止
+            </b>
+            ，截止後系統自動抽籤產生對戰表；開賽前 72 小時內取消記 0.5
+            點信譽點數。
           </p>
         </div>
       </div>

@@ -12,8 +12,10 @@ import { TierBadge, StatusChip } from "@/components/TierBadge";
 import {
   BracketView,
   GenerateBracketButton,
+  RegenerateBracketButton,
   SettleFromBracketButton,
 } from "@/components/BracketView";
+import { autoGenerateBrackets } from "@/lib/autoBracket";
 import { RefereePanel, type RefereeRow } from "@/components/RefereePanel";
 
 export const dynamic = "force-dynamic";
@@ -36,8 +38,12 @@ export default async function HostBracketPage({
     .single<DbEvent>();
   if (!event || event.organizer_id !== organizer.id) notFound();
 
+  await autoGenerateBrackets(db); // 報名截止即自動抽籤（補跑）
   const { matches, view } = await loadBracketView(db, event.id);
   const complete = matches.length > 0 && bracketComplete(matches);
+  const anyPlayed = matches.some(
+    (m) => m.winner_id && m.player1_id && m.player2_id
+  );
 
   // 裁判邀請資訊
   const joinUrl = `${baseUrl()}/referee/${(event as DbEvent & { referee_code: string }).referee_code}`;
@@ -102,7 +108,8 @@ export default async function HostBracketPage({
         {view.length === 0 ? (
           <div className="rounded-2xl border border-arena-line bg-arena-card p-5">
             <p className="mb-3 text-sm text-slate-400">
-              還沒有對戰表。報到完成後按下面的按鈕，系統會把「已報到」的選手隨機配對成單淘汰賽程（含季軍戰，人數不是
+              對戰表會在<b className="text-cyanx">報名截止（開賽前 2 小時）</b>
+              時自動抽籤產生。想提前抽也可以按下面的按鈕——系統會把已報名的選手隨機配對成單淘汰賽程（含季軍戰，人數不是
               2 的次方時自動輪空）。
             </p>
             <GenerateBracketButton eventId={event.id} />
@@ -110,11 +117,16 @@ export default async function HostBracketPage({
         ) : (
           <>
             <p className="mb-3 text-xs text-slate-500">
-              點選手名字＝該場獲勝並晉級；點錯可按該場右上「撤銷」。玩家可在賽事頁看到即時晉級圖。
+              點選手名字＝該場獲勝並晉級；點錯可按該場右上「撤銷」。標示
+              <span className="text-red-300">「未報到」</span>
+              的選手若沒出現，直接點對手獲勝即可（爽約視同棄權）。
             </p>
             <BracketView eventId={event.id} matches={view} interactive />
             {complete && event.status !== "done" && (
               <SettleFromBracketButton eventId={event.id} />
+            )}
+            {!anyPlayed && event.status !== "done" && (
+              <RegenerateBracketButton eventId={event.id} />
             )}
             {event.status === "done" && (
               <p className="mt-4 rounded-lg border border-emerald-400/50 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-300">

@@ -16,6 +16,7 @@ import {
   TIERS,
   isTier,
   bannedUntilFor,
+  REGISTRATION_CLOSE_HOURS,
 } from "@/lib/events";
 import { pushToPlayers } from "@/lib/push";
 import {
@@ -244,6 +245,13 @@ export async function createEvent(
       ? dayBefore
       : startsAt.getTime() - 2 * 3600_000
   );
+  // 報名截止：開賽前 2 小時（寫死），截止後系統自動抽籤產生對戰表
+  const registrationDeadline = new Date(
+    Math.max(
+      startsAt.getTime() - REGISTRATION_CLOSE_HOURS * 3600_000,
+      Date.now() + 10 * 60_000
+    )
+  );
 
   const db = supabaseAdmin();
   const { data, error } = await db
@@ -260,6 +268,7 @@ export async function createEvent(
       capacity,
       min_required: minRequired,
       confirm_deadline: confirmDeadline.toISOString(),
+      registration_deadline: registrationDeadline.toISOString(),
       rules_note: rulesNote || null,
       status: "open",
     })
@@ -471,6 +480,55 @@ export async function generateBracket(
     return { ok: false, error: "對戰表已產生過了" };
   }
 
+  // 手動產生：用已報名名單（與報名截止自動抽籤同一套規則）
+  const { data: regs } = await db
+    .from("registrations")
+    .select("player_id")
+    .eq("event_id", eventId)
+    .eq("status", "ok")
+    .returns<Array<{ player_id: string }>>();
+  const playerIds = (regs ?? []).map((r) => r.player_id);
+  if (playerIds.length < 2) {
+    return { ok: false, error: "至少要 2 位報名選手才能產生對戰表" };
+  }
+
+  const rows = buildBracket(eventId, playerIds);
+  const { error } = await db.from("matches").insert(rows);
+  if (error) return { ok: false, error: "產生對戰表失敗，請重試" };
+
+  revalidatePath(`/host/event/${eventId}/bracket`);
+  revalidatePath(`/host/event/${eventId}`);
+  revalidatePath(`/event/${eventId}/bracket`);
+  return { ok: true };
+}
+
+/**
+ * 重新抽籤：現場缺席太多時，用「實到（已報到）」名單重排對戰表。
+ * 僅限尚未記錄任何勝負時使用（避免抹掉已打完的成績）。
+ */
+export async function regenerateBracket(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const eventId = String(formData.get("event_id") ?? "");
+  const owner = await requireEventOwner(eventId);
+  if (owner.error || !owner.event) return { ok: false, error: owner.error };
+  if (owner.event.status === "done") {
+    return { ok: false, error: "賽事已結算，不能重新抽籤" };
+  }
+
+  const db = supabaseAdmin();
+  const matches = await loadMatches(db, eventId);
+  const played = matches.filter(
+    (m) => m.winner_id && m.player1_id && m.player2_id
+  );
+  if (played.length > 0) {
+    return {
+      ok: false,
+      error: "已經有場次記錄勝負了，不能重新抽籤（可先逐場撤銷）",
+    };
+  }
+
   const { data: regs } = await db
     .from("registrations")
     .select("player_id")
@@ -480,15 +538,16 @@ export async function generateBracket(
     .returns<Array<{ player_id: string }>>();
   const playerIds = (regs ?? []).map((r) => r.player_id);
   if (playerIds.length < 2) {
-    return { ok: false, error: "至少要 2 位已報到選手才能產生對戰表" };
+    return { ok: false, error: "至少要 2 位已報到選手才能重新抽籤" };
   }
 
+  await db.from("matches").delete().eq("event_id", eventId);
   const rows = buildBracket(eventId, playerIds);
   const { error } = await db.from("matches").insert(rows);
-  if (error) return { ok: false, error: "產生對戰表失敗，請重試" };
+  if (error) return { ok: false, error: "重新抽籤失敗，請重試" };
 
   revalidatePath(`/host/event/${eventId}/bracket`);
-  revalidatePath(`/host/event/${eventId}`);
+  revalidatePath(`/referee/event/${eventId}`);
   revalidatePath(`/event/${eventId}/bracket`);
   return { ok: true };
 }

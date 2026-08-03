@@ -44,6 +44,8 @@ export type DbEvent = {
   capacity: number;
   min_required: number;
   confirm_deadline: string;
+  /** 報名截止（開賽前 2 小時，之後自動產生對戰表） */
+  registration_deadline: string | null;
   rules_note: string | null;
   status: "open" | "confirmed" | "void" | "cancelled" | "done";
 };
@@ -68,6 +70,21 @@ export const EVENT_STATUS_LABEL: Record<DbEvent["status"], string> = {
 
 /** 取消報名的無責時限（小時）：賽前 72 小時內取消記 0.5 點 */
 export const FREE_CANCEL_HOURS = 72;
+
+/** 報名截止：開賽前幾小時（寫死，之後自動抽籤產生對戰表） */
+export const REGISTRATION_CLOSE_HOURS = 2;
+
+/** 報名截止時間（舊資料沒有欄位時，由開賽時間回推） */
+export function registrationDeadlineOf(event: DbEvent): Date {
+  if (event.registration_deadline) return new Date(event.registration_deadline);
+  return new Date(
+    new Date(event.starts_at).getTime() - REGISTRATION_CLOSE_HOURS * 3600_000
+  );
+}
+
+export function isRegistrationClosed(event: DbEvent): boolean {
+  return registrationDeadlineOf(event) <= new Date();
+}
 
 export function formatTaipei(iso: string): string {
   return new Intl.DateTimeFormat("zh-TW", {

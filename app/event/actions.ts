@@ -7,9 +7,12 @@ import {
   DbEvent,
   DbRegistration,
   FREE_CANCEL_HOURS,
+  REGISTRATION_CLOSE_HOURS,
   bannedUntilFor,
   formatTaipei,
   isPlayerBanned,
+  isRegistrationClosed,
+  registrationDeadlineOf,
 } from "@/lib/events";
 import { pushToPlayers } from "@/lib/push";
 
@@ -56,8 +59,11 @@ export async function registerPlayer(
   if (event.status !== "open" && event.status !== "confirmed") {
     return { ok: false, error: "此賽事目前不開放報名" };
   }
-  if (new Date(event.starts_at) <= new Date()) {
-    return { ok: false, error: "賽事已開始，無法報名" };
+  if (isRegistrationClosed(event)) {
+    return {
+      ok: false,
+      error: `報名已於 ${formatTaipei(registrationDeadlineOf(event).toISOString())} 截止（開賽前 ${REGISTRATION_CLOSE_HOURS} 小時），對戰表已抽出`,
+    };
   }
 
   // 既有報名紀錄（unique(event_id, player_id)）
@@ -133,8 +139,11 @@ export async function cancelRegistration(
     .eq("id", reg.event_id)
     .single<DbEvent>();
   if (!event) return { ok: false, error: "找不到賽事" };
-  if (new Date(event.starts_at) <= new Date()) {
-    return { ok: false, error: "賽事已開始，無法取消" };
+  if (isRegistrationClosed(event)) {
+    return {
+      ok: false,
+      error: "報名已截止、對戰表已抽出，無法自行取消——請直接聯絡主辦方",
+    };
   }
 
   const wasOk = reg.status === "ok";

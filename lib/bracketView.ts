@@ -18,21 +18,36 @@ export async function loadBracketView(
         .filter((x): x is string => !!x)
     )
   );
-  const { data: players } = playerIds.length
-    ? await db
-        .from("players")
-        .select("id,nickname,avatar")
-        .in("id", playerIds)
-        .returns<Array<Pick<DbPlayer, "id" | "nickname" | "avatar">>>()
-    : { data: [] as Array<Pick<DbPlayer, "id" | "nickname" | "avatar">> };
+  const [{ data: players }, { data: regs }] = await Promise.all([
+    playerIds.length
+      ? db
+          .from("players")
+          .select("id,nickname,avatar")
+          .in("id", playerIds)
+          .returns<Array<Pick<DbPlayer, "id" | "nickname" | "avatar">>>()
+      : Promise.resolve({
+          data: [] as Array<Pick<DbPlayer, "id" | "nickname" | "avatar">>,
+        }),
+    db
+      .from("registrations")
+      .select("player_id,checked_in_at")
+      .eq("event_id", eventId)
+      .returns<Array<{ player_id: string; checked_in_at: string | null }>>(),
+  ]);
   const map = new Map((players ?? []).map((p) => [p.id, p]));
+  const checkedIn = new Set(
+    (regs ?? []).filter((r) => r.checked_in_at).map((r) => r.player_id)
+  );
 
   const toP = (id: string | null) => {
     if (!id) return null;
     const p = map.get(id);
-    return p
-      ? { id: p.id, nickname: p.nickname, avatar: p.avatar }
-      : { id, nickname: "選手", avatar: "🌀" };
+    return {
+      id,
+      nickname: p?.nickname ?? "選手",
+      avatar: p?.avatar ?? "🌀",
+      checkedIn: checkedIn.has(id),
+    };
   };
 
   const view: ViewMatch[] = matches.map((m) => ({
