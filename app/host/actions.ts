@@ -675,3 +675,54 @@ export async function removeReferee(
   revalidatePath(`/host/event/${eventId}/bracket`);
   return { ok: true };
 }
+
+/**
+ * 申請成為主辦方。送出後進入待審清單，由平台管理員在 /admin 核准。
+ *
+ * 同一帳號同時只能有一筆待審申請（資料庫的 partial unique index 擋住，
+ * 這裡先查一次是為了給出清楚的訊息而非資料庫錯誤）；被婉拒後可以重新申請。
+ */
+export async function applyForOrganizer(
+  _prev: FormResult,
+  formData: FormData
+): Promise<FormResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "請先登入" };
+
+  const shopName = String(formData.get("shop_name") ?? "").trim();
+  const contact = String(formData.get("contact") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+  if (shopName.length < 2 || shopName.length > 30) {
+    return { ok: false, error: "主辦方／店家名稱請填 2–30 字" };
+  }
+  if (contact.length < 5 || contact.length > 60) {
+    return { ok: false, error: "聯絡方式請填 5–60 字（電話或 LINE ID）" };
+  }
+  if (note.length > 200) {
+    return { ok: false, error: "補充說明請控制在 200 字內" };
+  }
+
+  const db = supabaseAdmin();
+  const existingOrganizer = await getOrganizerForUser(db, session.uid);
+  if (existingOrganizer) {
+    return { ok: false, error: "這個帳號已經是主辦方了" };
+  }
+
+  const { error } = await db.from("organizer_applications").insert({
+    user_id: session.uid,
+    shop_name: shopName,
+    contact,
+    note: note || null,
+  });
+  if (error) {
+    // 23505 = unique_violation，代表已經有一筆待審申請
+    if ((error as { code?: string }).code === "23505") {
+      return { ok: false, error: "你已經有一筆申請正在審核中" };
+    }
+    console.error("主辦方申請寫入失敗：", { uid: session.uid, error });
+    return { ok: false, error: "送出失敗，請稍後再試" };
+  }
+
+  revalidatePath("/host");
+  return { ok: true };
+}

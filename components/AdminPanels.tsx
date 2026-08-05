@@ -4,6 +4,8 @@ import { useFormState, useFormStatus } from "react-dom";
 import {
   createOrganizer,
   updateOrganizer,
+  approveApplication,
+  rejectApplication,
   type AdminResult,
 } from "@/app/admin/actions";
 import { TIERS, Tier } from "@/lib/events";
@@ -105,5 +107,81 @@ export function EditOrganizerForm({
       </div>
       <Msg state={state} />
     </form>
+  );
+}
+
+function RejectSubmit() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-lg border border-arena-line px-3 py-1.5 text-sm text-slate-400 transition hover:border-red-400 hover:text-red-300 disabled:opacity-50"
+    >
+      {pending ? "…" : "婉拒"}
+    </button>
+  );
+}
+
+/**
+ * 待審申請卡片：核准與婉拒各自一個 form。
+ * 核准是主要動作（放大、亮色），婉拒需要填原因，對方看得到。
+ */
+export function ApplicationCard({
+  applicationId,
+  shopName,
+  contact,
+  note,
+  displayName,
+  appliedAt,
+}: {
+  applicationId: string;
+  shopName: string;
+  contact: string;
+  note: string | null;
+  displayName: string;
+  appliedAt: string;
+}) {
+  const [approveState, approveAction] = useFormState(
+    approveApplication,
+    initialState
+  );
+  const [rejectState, rejectAction] = useFormState(
+    rejectApplication,
+    initialState
+  );
+
+  return (
+    <div className="rounded-2xl border border-gold/50 bg-gold/5 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-black text-gold">🏟 {shopName}</p>
+          <p className="mt-0.5 text-xs text-slate-400">
+            申請人 {displayName}｜{appliedAt}
+          </p>
+        </div>
+      </div>
+
+      <p className="mt-2 text-sm text-slate-300">📞 {contact}</p>
+      {note && <p className="mt-1 text-sm text-slate-400">💬 {note}</p>}
+
+      <form action={approveAction} className="mt-3">
+        <input type="hidden" name="application_id" value={applicationId} />
+        <Submit label="✓ 核准開通（銅級）" />
+      </form>
+      <Msg state={approveState} />
+
+      <form action={rejectAction} className="mt-2 flex items-center gap-2">
+        <input type="hidden" name="application_id" value={applicationId} />
+        <input
+          name="reject_reason"
+          maxLength={100}
+          placeholder="婉拒原因（選填，申請人看得到）"
+          className="min-w-0 flex-1 rounded-lg border border-arena-line bg-arena px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-red-400"
+        />
+        <RejectSubmit />
+      </form>
+      <Msg state={rejectState} />
+    </div>
   );
 }

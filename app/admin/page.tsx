@@ -3,11 +3,12 @@ import { notFound } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin, DbUser } from "@/lib/supabase";
 import { isAdmin } from "@/lib/admin";
-import { DbOrganizer } from "@/lib/organizer";
-import { Tier, TIERS } from "@/lib/events";
+import { DbOrganizer, DbOrganizerApplication } from "@/lib/organizer";
+import { Tier, TIERS, formatTaipei } from "@/lib/events";
 import {
   CreateOrganizerForm,
   EditOrganizerForm,
+  ApplicationCard,
 } from "@/components/AdminPanels";
 
 export const dynamic = "force-dynamic";
@@ -17,19 +18,32 @@ export default async function AdminPage() {
   if (!(await isAdmin(session))) notFound();
 
   const db = supabaseAdmin();
-  const [{ data: users }, { data: organizers }, { count: playerCount }, { count: eventCount }] =
-    await Promise.all([
-      db
-        .from("users")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .returns<DbUser[]>(),
-      db.from("organizers").select("*").returns<DbOrganizer[]>(),
-      db.from("players").select("id", { count: "exact", head: true }),
-      db.from("events").select("id", { count: "exact", head: true }),
-    ]);
+  const [
+    { data: users },
+    { data: organizers },
+    { data: pending },
+    { count: playerCount },
+    { count: eventCount },
+  ] = await Promise.all([
+    db
+      .from("users")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .returns<DbUser[]>(),
+    db.from("organizers").select("*").returns<DbOrganizer[]>(),
+    db
+      .from("organizer_applications")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .returns<DbOrganizerApplication[]>(),
+    db.from("players").select("id", { count: "exact", head: true }),
+    db.from("events").select("id", { count: "exact", head: true }),
+  ]);
 
   const orgByUser = new Map((organizers ?? []).map((o) => [o.user_id, o]));
+  const userById = new Map((users ?? []).map((u) => [u.id, u]));
+  const pendingApps = pending ?? [];
 
   return (
     <main className="mx-auto max-w-md px-4 py-8">
@@ -47,6 +61,27 @@ export default async function AdminPage() {
         帳號 {(users ?? []).length}｜選手 {playerCount ?? 0}｜主辦方{" "}
         {(organizers ?? []).length}｜賽事 {eventCount ?? 0}
       </p>
+
+      {pendingApps.length > 0 && (
+        <section className="mt-6 space-y-3">
+          <h2 className="font-bold text-gold">
+            📮 待審主辦方申請（{pendingApps.length}）
+          </h2>
+          {pendingApps.map((a) => (
+            <ApplicationCard
+              key={a.id}
+              applicationId={a.id}
+              shopName={a.shop_name}
+              contact={a.contact}
+              note={a.note}
+              displayName={
+                userById.get(a.user_id)?.display_name ?? "（未命名帳號）"
+              }
+              appliedAt={formatTaipei(a.created_at)}
+            />
+          ))}
+        </section>
+      )}
 
       <section className="mt-6 space-y-3">
         <h2 className="font-bold text-slate-200">帳號與主辦方</h2>

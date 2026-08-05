@@ -12,6 +12,21 @@ export type DbOrganizer = {
   created_at: string;
 };
 
+export type ApplicationStatus = "pending" | "approved" | "rejected";
+
+export type DbOrganizerApplication = {
+  id: string;
+  user_id: string;
+  shop_name: string;
+  contact: string;
+  note: string | null;
+  status: ApplicationStatus;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  reject_reason: string | null;
+  created_at: string;
+};
+
 /** 未認證主辦方辦滿幾場（結算完成）解鎖銀級 */
 export const SILVER_UNLOCK_EVENTS = 3;
 
@@ -42,5 +57,23 @@ export async function getOrganizerForUser(
     .select("*")
     .eq("user_id", uid)
     .maybeSingle<DbOrganizer>();
+  return data ?? null;
+}
+
+/**
+ * 取得這個帳號最近一筆主辦方申請（沒有則回 null）。
+ * 用最新一筆而非只看 pending，這樣被婉拒後也能在頁面上看到結果與原因。
+ */
+export async function getLatestApplication(
+  db: SupabaseClient,
+  uid: string
+): Promise<DbOrganizerApplication | null> {
+  const { data } = await db
+    .from("organizer_applications")
+    .select("*")
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<DbOrganizerApplication>();
   return data ?? null;
 }

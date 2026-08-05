@@ -4,9 +4,12 @@ import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import {
   getOrganizerForUser,
+  getLatestApplication,
   effectiveTierAllowed,
   SILVER_UNLOCK_EVENTS,
 } from "@/lib/organizer";
+import { DbUser } from "@/lib/supabase";
+import { HostApplyForm } from "@/components/HostApplyForm";
 import { DbEvent, EVENT_STATUS_LABEL, formatTaipei, TIERS } from "@/lib/events";
 import { TierBadge, StatusChip } from "@/components/TierBadge";
 
@@ -19,14 +22,45 @@ export default async function HostPage() {
   const db = supabaseAdmin();
   const organizer = await getOrganizerForUser(db, session.uid);
   if (!organizer) {
+    const application = await getLatestApplication(db, session.uid);
+    const { data: me } = await db
+      .from("users")
+      .select("display_name")
+      .eq("id", session.uid)
+      .maybeSingle<Pick<DbUser, "display_name">>();
+
     return (
       <main className="mx-auto max-w-md px-4 py-10 text-center">
         <p className="text-4xl">🏟️</p>
         <h1 className="mt-3 text-xl font-black">主辦方專區</h1>
-        <p className="mt-3 text-sm text-slate-400">
-          你目前還不是主辦方。想在你的店裡辦賽事嗎？主辦方申請功能即將推出（M4／M5），
-          先跟平台管理員聯絡開通。
-        </p>
+
+        {application?.status === "pending" ? (
+          <div className="card-x mt-6 p-5">
+            <p className="text-3xl">⏳</p>
+            <h2 className="mt-2 font-black text-cyanx">審核中</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              你已申請以「{application.shop_name}」開辦賽事，
+              平台管理員正在審核。通過後會用 LINE 通知你，這一頁也會變成你的主辦後台。
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="mt-3 text-sm text-slate-400">
+              想在你的店裡、或跟朋友揪一場比賽嗎？填一下資料就可以申請開辦。
+            </p>
+            {application?.status === "rejected" && (
+              <p className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-200">
+                上次的申請沒有通過
+                {application.reject_reason
+                  ? `：${application.reject_reason}`
+                  : "。"}
+                補充資料後可以再送一次。
+              </p>
+            )}
+            <HostApplyForm defaultName={me?.display_name ?? ""} />
+          </>
+        )}
+
         <Link
           href="/"
           className="mt-6 inline-block text-sm text-cyanx underline"
