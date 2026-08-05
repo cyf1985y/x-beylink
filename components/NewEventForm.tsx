@@ -9,12 +9,11 @@ const initialState: FormResult = { ok: false };
 
 const DIVISIONS = ["幼兒／國小組", "國中／高中組", "成人組", "其他"] as const;
 
-/** 常用開賽時間（半小時一格 10:00–20:30） */
-const TIME_OPTIONS = Array.from({ length: 22 }, (_, i) => {
-  const h = 10 + Math.floor(i / 2);
-  const m = i % 2 === 0 ? "00" : "30";
-  return `${String(h).padStart(2, "0")}:${m}`;
-});
+/**
+ * 常用開賽時段的快捷鍵。時間本身是自由輸入（input type="time"），
+ * 這幾顆只是省得每次都要點時間選擇器。
+ */
+const TIME_PRESETS = ["10:00", "13:00", "14:00", "18:00", "19:00"] as const;
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -62,6 +61,7 @@ export function NewEventForm({ tierAllowed }: { tierAllowed: Tier }) {
   const [state, formAction] = useFormState(createEvent, initialState);
   const [tier, setTier] = useState<Tier>("bronze");
   const [date, setDate] = useState("");
+  const [time, setTime] = useState("14:00");
   const allowedIdx = TIER_KEYS.indexOf(tierAllowed);
   const presets = quickDates();
 
@@ -148,16 +148,34 @@ export function NewEventForm({ tierAllowed }: { tierAllowed: Tier }) {
             onChange={(e) => setDate(e.target.value)}
             className={inputCls}
           />
-          <select name="starts_time" required defaultValue="14:00" className={inputCls}>
-            {TIME_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <input
+            name="starts_time"
+            type="time"
+            required
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className={inputCls}
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {TIME_PRESETS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTime(t)}
+              className={`rounded-full border px-3 py-1 text-xs transition ${
+                time === t
+                  ? "border-cyanx bg-cyanx/15 text-cyanx"
+                  : "border-arena-line text-slate-400 hover:border-cyanx/50"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          成行判定自動設在開賽前 24 小時（臨期改為前 2 小時），未達成團門檻自動流局。
+          時間可直接輸入（上面幾個是常用時段）。成行判定自動設在開賽前 24
+          小時（臨期改為前 2 小時），未達成團門檻自動流局。
         </p>
       </div>
 
