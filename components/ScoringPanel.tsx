@@ -4,12 +4,23 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  addPoint,
+  addFinish,
+  addPenalty,
+  addReshoot,
   undoLastPoint,
   type ScoreResult,
 } from "@/app/referee/scoring";
-import { FINISH_TYPES, WIN_POINTS } from "@/lib/bracket";
-import { beepScore, beepUndo, fanfare, speak } from "@/lib/sound";
+import {
+  FINISH_TYPES,
+  WIN_POINTS,
+  type FinishType,
+  type ReshootReason,
+} from "@/lib/bracket";
+import type { DbMatchPoint } from "@/lib/rounds";
+import { beepScore, beepUndo, beepReshoot, fanfare, speak } from "@/lib/sound";
+import { RoundCountdown } from "@/components/RoundCountdown";
+import { ReshootButton } from "@/components/ReshootButton";
+import { RoundTimeline } from "@/components/RoundTimeline";
 
 export type ScoringMatch = {
   id: string;
@@ -21,6 +32,7 @@ export type ScoringMatch = {
   score1: number;
   score2: number;
   winnerId: string | null;
+  rounds: DbMatchPoint[];
 };
 
 function ScoreCard({
@@ -62,20 +74,21 @@ function ScoreCard({
   );
 }
 
-function PointRow({
+/** 該選手的四顆結束方式（2×2，按鈕要大） */
+function FinishRow({
   label,
   avatar,
   accent,
   disabled,
-  onAdd,
-  onSub,
+  onFinish,
+  onPenalty,
 }: {
   label: string;
   avatar: string;
   accent: "cyan" | "violet";
   disabled: boolean;
-  onAdd: (points: number) => void;
-  onSub: () => void;
+  onFinish: (finish: FinishType) => void;
+  onPenalty: () => void;
 }) {
   return (
     <div className="mt-4">
@@ -87,29 +100,30 @@ function PointRow({
         <button
           type="button"
           disabled={disabled}
-          onClick={onSub}
+          onClick={onPenalty}
           className="rounded-lg border border-arena-line px-2.5 py-1 text-xs text-slate-500 transition hover:border-red-400 hover:text-red-300 disabled:opacity-40"
         >
-          −1 犯規／復原
+          −1 犯規
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {FINISH_TYPES.map((f) => (
           <button
-            key={f.label}
+            key={f.type}
             type="button"
             disabled={disabled}
-            onClick={() => onAdd(f.points)}
-            className={`rounded-xl border py-3 text-center transition active:scale-95 disabled:opacity-40 ${
+            onClick={() => onFinish(f.type)}
+            className={`rounded-xl border py-3.5 text-center transition active:scale-95 disabled:opacity-40 ${
               accent === "cyan"
                 ? "border-cyanx/40 bg-cyanx/10 hover:bg-cyanx/20"
                 : "border-violetx/40 bg-violetx/10 hover:bg-violetx/20"
             }`}
           >
-            <span className="block font-num text-xl font-bold">
+            <span className="block text-lg leading-none">{f.icon}</span>
+            <span className="mt-1 block text-sm font-black">{f.label}</span>
+            <span className="block font-num text-xs text-slate-400">
               +{f.points}
             </span>
-            <span className="block text-[11px] text-slate-400">{f.label}</span>
           </button>
         ))}
       </div>
@@ -122,6 +136,7 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
   const [s1, setS1] = useState(match.score1);
   const [s2, setS2] = useState(match.score2);
   const [winnerId, setWinnerId] = useState<string | null>(match.winnerId);
+  const [rounds, setRounds] = useState<DbMatchPoint[]>(match.rounds);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -133,6 +148,7 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
     onBefore?.();
     startTransition(async () => {
       const r = await fn();
+      if (r.rounds) setRounds(r.rounds);
       if (!r.ok) {
         setError(r.error ?? "操作失敗");
         return;
@@ -149,127 +165,157 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
     });
   };
 
-  return (
-    <div className="card-x p-4">
-      <p className="text-center text-sm font-black tracking-wider text-slate-300">
-        {match.roundLabel}・第 {match.tableNo} 決鬥台
-      </p>
+  const reshoot = (reason: ReshootReason) =>
+    handle(
+      () => addReshoot(match.eventId, match.id, reason),
+      () => beepReshoot()
+    );
 
-      <div className="mt-3 flex items-stretch gap-2">
-        <ScoreCard
-          player={match.player1}
-          score={s1}
-          isWinner={!!winnerId && winnerId === match.player1?.id}
-          accent="cyan"
-        />
-        <div className="flex items-center">
-          <span className="font-num text-lg font-bold text-violetx">VS</span>
+  return (
+    <>
+      <div className="card-x p-4">
+        <p className="text-center text-sm font-black tracking-wider text-slate-300">
+          {match.roundLabel}・第 {match.tableNo} 決鬥台
+        </p>
+
+        <div className="mt-3 flex items-stretch gap-2">
+          <ScoreCard
+            player={match.player1}
+            score={s1}
+            isWinner={!!winnerId && winnerId === match.player1?.id}
+            accent="cyan"
+          />
+          <div className="flex items-center">
+            <span className="font-num text-lg font-bold text-violetx">VS</span>
+          </div>
+          <ScoreCard
+            player={match.player2}
+            score={s2}
+            isWinner={!!winnerId && winnerId === match.player2?.id}
+            accent="violet"
+          />
         </div>
-        <ScoreCard
-          player={match.player2}
-          score={s2}
-          isWinner={!!winnerId && winnerId === match.player2?.id}
-          accent="violet"
-        />
+
+        {finished ? (
+          <div className="mt-4 rounded-xl border border-gold/60 bg-gold/10 p-4 text-center">
+            <p className="text-lg font-black text-gold">
+              🏆{" "}
+              {winnerId === match.player1?.id
+                ? match.player1?.nickname
+                : match.player2?.nickname}{" "}
+              獲勝！
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              已自動晉級；按下方「復原上一筆」可修正誤判
+            </p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                handle(
+                  () => undoLastPoint(match.eventId, match.id),
+                  () => beepUndo()
+                )
+              }
+              className="mx-auto mt-3 block rounded-lg border border-arena-line px-4 py-2 text-xs text-slate-400 transition hover:border-gold hover:text-gold"
+            >
+              ↩ 復原上一筆計分（誤判修正）
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-4">
+              <RoundCountdown disabled={!ready} />
+              <p className="mt-1.5 text-center text-[11px] text-slate-500">
+                按下會全螢幕倒數 3、2、1、GO SHOOT（有聲音）
+              </p>
+            </div>
+
+            <FinishRow
+              label={match.player1?.nickname ?? "選手 1"}
+              avatar={match.player1?.avatar ?? "❔"}
+              accent="cyan"
+              disabled={pending || !ready}
+              onFinish={(f) =>
+                handle(
+                  () => addFinish(match.eventId, match.id, 1, f),
+                  () => beepScore(1, FINISH_TYPES.find((x) => x.type === f)!.points)
+                )
+              }
+              onPenalty={() =>
+                handle(
+                  () => addPenalty(match.eventId, match.id, 1),
+                  () => beepUndo()
+                )
+              }
+            />
+            <FinishRow
+              label={match.player2?.nickname ?? "選手 2"}
+              avatar={match.player2?.avatar ?? "❔"}
+              accent="violet"
+              disabled={pending || !ready}
+              onFinish={(f) =>
+                handle(
+                  () => addFinish(match.eventId, match.id, 2, f),
+                  () => beepScore(2, FINISH_TYPES.find((x) => x.type === f)!.points)
+                )
+              }
+              onPenalty={() =>
+                handle(
+                  () => addPenalty(match.eventId, match.id, 2),
+                  () => beepUndo()
+                )
+              }
+            />
+
+            <div className="mt-3 flex gap-2">
+              <ReshootButton
+                disabled={pending || !ready}
+                onPick={reshoot}
+                className="flex-1 rounded-lg border border-slate-500/50 py-2 text-xs text-slate-300 transition hover:border-slate-300 disabled:opacity-40"
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  handle(
+                    () => undoLastPoint(match.eventId, match.id),
+                    () => beepUndo()
+                  )
+                }
+                className="flex-1 rounded-lg border border-arena-line py-2 text-xs text-slate-500 transition hover:border-gold hover:text-gold disabled:opacity-40"
+              >
+                ↩ 復原上一筆
+              </button>
+            </div>
+            <p className="mt-2 text-center text-xs text-slate-500">
+              先取得 <b className="text-cyanx">{WIN_POINTS} 分</b>{" "}
+              者獲勝・點按即計分
+            </p>
+          </>
+        )}
+
+        {error && (
+          <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </p>
+        )}
+
+        <Link
+          href={`/scoreboard/${match.id}`}
+          target="_blank"
+          className="btn-gold mt-4 block w-full text-sm"
+        >
+          🖥️ 計分板模式（架在戰鬥盤旁）
+        </Link>
       </div>
 
-      {finished ? (
-        <div className="mt-4 rounded-xl border border-gold/60 bg-gold/10 p-4 text-center">
-          <p className="text-lg font-black text-gold">
-            🏆{" "}
-            {winnerId === match.player1?.id
-              ? match.player1?.nickname
-              : match.player2?.nickname}{" "}
-            獲勝！
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            已自動晉級；按下方「−1 犯規／復原」可修正誤判
-          </p>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              handle(
-                () => undoLastPoint(match.eventId, match.id),
-                () => beepUndo()
-              )
-            }
-            className="mx-auto mt-3 block rounded-lg border border-arena-line px-4 py-2 text-xs text-slate-400 transition hover:border-gold hover:text-gold"
-          >
-            ↩ 復原上一筆計分（誤判修正）
-          </button>
-        </div>
-      ) : (
-        <>
-          <PointRow
-            label={match.player1?.nickname ?? "選手 1"}
-            avatar={match.player1?.avatar ?? "❔"}
-            accent="cyan"
-            disabled={pending || !ready}
-            onAdd={(p) =>
-              handle(
-                () => addPoint(match.eventId, match.id, 1, p),
-                () => beepScore(1, p)
-              )
-            }
-            onSub={() =>
-              handle(
-                () => addPoint(match.eventId, match.id, 1, -1),
-                () => beepUndo()
-              )
-            }
-          />
-          <PointRow
-            label={match.player2?.nickname ?? "選手 2"}
-            avatar={match.player2?.avatar ?? "❔"}
-            accent="violet"
-            disabled={pending || !ready}
-            onAdd={(p) =>
-              handle(
-                () => addPoint(match.eventId, match.id, 2, p),
-                () => beepScore(2, p)
-              )
-            }
-            onSub={() =>
-              handle(
-                () => addPoint(match.eventId, match.id, 2, -1),
-                () => beepUndo()
-              )
-            }
-          />
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              handle(
-                () => undoLastPoint(match.eventId, match.id),
-                () => beepUndo()
-              )
-            }
-            className="mt-3 w-full rounded-lg border border-arena-line py-2 text-xs text-slate-500 transition hover:border-gold hover:text-gold disabled:opacity-40"
-          >
-            ↩ 復原上一筆計分
-          </button>
-          <p className="mt-2 text-center text-xs text-slate-500">
-            先取得 <b className="text-cyanx">{WIN_POINTS} 分</b>{" "}
-            者獲勝・點按即計分
-          </p>
-        </>
-      )}
-
-      {error && (
-        <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {error}
-        </p>
-      )}
-
-      <Link
-        href={`/scoreboard/${match.id}`}
-        target="_blank"
-        className="btn-gold mt-4 block w-full text-sm"
-      >
-        🖥️ 計分板模式（架在戰鬥盤旁）
-      </Link>
-    </div>
+      <RoundTimeline
+        className="mt-6"
+        rows={rounds}
+        player1={match.player1}
+        player2={match.player2}
+      />
+    </>
   );
 }

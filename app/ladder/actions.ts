@@ -12,6 +12,18 @@ import {
   activeSeason,
   rankOf,
 } from "@/lib/ladder";
+import {
+  FINISH_POINTS,
+  isFinishType,
+  isReshootReason,
+  type FinishType,
+  type ReshootReason,
+} from "@/lib/bracket";
+import {
+  loadLadderRounds,
+  scoreOf,
+  type DbMatchPoint,
+} from "@/lib/rounds";
 
 export type LadderResult = {
   ok: boolean;
@@ -121,6 +133,162 @@ export async function challenge(
 
   revalidatePath(`/ladder/gym/${gymId}`);
   return { ok: true, matchId: res.new_match_id ?? undefined };
+}
+
+/* --------------------------------- 逐回合計分 ------------------------------- */
+
+export type LadderRoundsResult = {
+  ok: boolean;
+  error?: string;
+  scoreA?: number;
+  scoreB?: number;
+  rounds?: DbMatchPoint[];
+};
+
+/**
+ * 天梯計分權限：這場的選手本人，且對戰還在進行中。
+ * 天梯沒有裁判，所以由選手自己記——記完再由敗方確認。
+ */
+async function requireLadderScorer(
+  matchId: string,
+  playerId: string
+): Promise<{ match?: DbLadderMatch; error?: string }> {
+  const mine = await requireMyPlayer(playerId);
+  if (mine.error) return { error: mine.error };
+
+  const db = supabaseAdmin();
+  const { data: match } = await db
+    .from("ladder_matches")
+    .select("*")
+    .eq("id", matchId)
+    .maybeSingle<DbLadderMatch>();
+  if (!match) return { error: "找不到這場對戰" };
+  if (match.player_a !== playerId && match.player_b !== playerId) {
+    return { error: "你不是這場的選手" };
+  }
+  if (match.status !== "playing") {
+    return { error: "這場已經回報，無法再計分" };
+  }
+  return { match };
+}
+
+/** 讀回目前的回合列與比分（side 1 = A 方、side 2 = B 方） */
+async function ladderRoundsResult(matchId: string): Promise<LadderRoundsResult> {
+  const db = supabaseAdmin();
+  const rounds = await loadLadderRounds(db, matchId);
+  const { s1, s2 } = scoreOf(rounds);
+  return { ok: true, scoreA: s1, scoreB: s2, rounds };
+}
+
+/** 逐回合紀錄（對戰頁輪詢與初始載入共用，旁觀者也讀得到） */
+export async function getLadderRounds(
+  matchId: string
+): Promise<LadderRoundsResult> {
+  return ladderRoundsResult(matchId);
+}
+
+/** 記一次得分：Spin +1、Over +2、Burst +2、Xtreme +3 */
+export async function addLadderFinish(
+  matchId: string,
+  playerId: string,
+  side: 1 | 2,
+  finish: FinishType
+): Promise<LadderRoundsResult> {
+  if (!isFinishType(finish)) return { ok: false, error: "結束方式不正確" };
+  if (side !== 1 && side !== 2) return { ok: false, error: "計分方不正確" };
+
+  const auth = await requireLadderScorer(matchId, playerId);
+  if (auth.error) return { ok: false, error: auth.error };
+
+  const session = await getSession();
+  await supabaseAdmin().from("match_points").insert({
+    ladder_match_id: matchId,
+    side,
+    points: FINISH_POINTS[finish],
+    finish_type: finish,
+    created_by: session?.uid ?? null,
+  });
+  return ladderRoundsResult(matchId);
+}
+
+/** 犯規扣分 −1 */
+export async function addLadderPenalty(
+  matchId: string,
+  playerId: string,
+  side: 1 | 2
+): Promise<LadderRoundsResult> {
+  if (side !== 1 && side !== 2) return { ok: false, error: "計分方不正確" };
+
+  const auth = await requireLadderScorer(matchId, playerId);
+  if (auth.error) return { ok: false, error: auth.error };
+
+  const session = await getSession();
+  await supabaseAdmin().from("match_points").insert({
+    ladder_match_id: matchId,
+    side,
+    points: -1,
+    created_by: session?.uid ?? null,
+  });
+  return ladderRoundsResult(matchId);
+}
+
+/** 重射：這一回合不計分重來，比分不動但紀錄上看得出發生過 */
+export async function addLadderReshoot(
+  matchId: string,
+  playerId: string,
+  reason: ReshootReason
+): Promise<LadderRoundsResult> {
+  if (!isReshootReason(reason)) return { ok: false, error: "重射原因不正確" };
+
+  const auth = await requireLadderScorer(matchId, playerId);
+  if (auth.error) return { ok: false, error: auth.error };
+
+  const session = await getSession();
+  await supabaseAdmin().from("match_points").insert({
+    ladder_match_id: matchId,
+    side: 0,
+    points: 0,
+    reshoot_reason: reason,
+    created_by: session?.uid ?? null,
+  });
+  return ladderRoundsResult(matchId);
+}
+
+/** 復原上一筆（得分、犯規或重射都算一筆） */
+export async function undoLadderRound(
+  matchId: string,
+  playerId: string
+): Promise<LadderRoundsResult> {
+  const auth = await requireLadderScorer(matchId, playerId);
+  if (auth.error) return { ok: false, error: auth.error };
+
+  const db = supabaseAdmin();
+  const { data: last } = await db
+    .from("match_points")
+    .select("id")
+    .eq("ladder_match_id", matchId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (!last) return { ok: false, error: "沒有可復原的計分紀錄" };
+
+  await db.from("match_points").delete().eq("id", last.id);
+  return ladderRoundsResult(matchId);
+}
+
+/** 歸零重來：清掉這場的所有回合紀錄 */
+export async function clearLadderRounds(
+  matchId: string,
+  playerId: string
+): Promise<LadderRoundsResult> {
+  const auth = await requireLadderScorer(matchId, playerId);
+  if (auth.error) return { ok: false, error: auth.error };
+
+  await supabaseAdmin()
+    .from("match_points")
+    .delete()
+    .eq("ladder_match_id", matchId);
+  return ladderRoundsResult(matchId);
 }
 
 /* -------------------------------- 回報／確認 ------------------------------- */

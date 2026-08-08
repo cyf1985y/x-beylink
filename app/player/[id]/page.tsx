@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { TIERS, Tier, formatTaipei, isTier } from "@/lib/events";
+import { careerFinishStats } from "@/lib/rounds";
 import {
   BASE_RATING,
   CLASS_LABEL,
@@ -80,6 +81,9 @@ export default async function PlayerPage({
     : { data: null };
   const ladderRank = ladder ? rankOf(ladder.rating) : null;
 
+  // 生涯結束方式（只算已結算的賽事與已成立的天梯場）
+  const finishes = await careerFinishStats(db, player.id);
+
   const attendanceRate =
     player.attendance_total > 0
       ? Math.round((player.attendance_ok / player.attendance_total) * 100)
@@ -130,6 +134,26 @@ export default async function PlayerPage({
               {attendanceRate === null ? "—" : `${attendanceRate}%`}
             </p>
             <p className="text-xs tracking-wider text-slate-500">出席率</p>
+          </div>
+        </div>
+
+        {/* 生涯數據：怎麼贏的（只算已結算的賽事與已成立的天梯場） */}
+        <div className="grid grid-cols-2 divide-x divide-arena-line border-t border-arena-line text-center">
+          <div className="p-4">
+            <p className="font-num text-2xl font-bold text-violetx">
+              {finishes.xtreme}
+            </p>
+            <p className="text-xs tracking-wider text-slate-500">
+              ⚡ Xtreme 次數
+            </p>
+          </div>
+          <div className="p-4">
+            <p className="font-num text-2xl font-bold text-orange-300">
+              {finishes.burst}
+            </p>
+            <p className="text-xs tracking-wider text-slate-500">
+              💥 Burst 次數
+            </p>
           </div>
         </div>
       </div>
