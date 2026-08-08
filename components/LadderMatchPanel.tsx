@@ -17,7 +17,12 @@ import {
   type MatchState,
 } from "@/app/ladder/actions";
 import { AUTO_CONFIRM_MINUTES } from "@/lib/ladder";
-import { WIN_POINTS, FINISH_TYPES, type ReshootReason } from "@/lib/bracket";
+import {
+  WIN_POINTS,
+  FINISH_TYPES,
+  isDecided,
+  type ReshootReason,
+} from "@/lib/bracket";
 import { scoreOf, type DbMatchPoint } from "@/lib/rounds";
 import { beepScore, beepUndo, beepReshoot, fanfare } from "@/lib/sound";
 import { RoundCountdown } from "@/components/RoundCountdown";
@@ -107,13 +112,11 @@ export function LadderMatchPanel({
   };
 
   /**
-   * 分出勝負：任一方達 4 分且雙方不同分。
-   *
-   * 上限不是 4——3 分時打出 Xtreme 會變成 6 分，所以合法的最高分是 6，
-   * 條件必須是 >= 而不是 ==。達標後鎖住計分（比照賽事版），
-   * 但「−1」與「復原上一筆」仍可按，那是誤判復原的路徑。
+   * 分出勝負後鎖住計分（比照賽事版），但「−1」與「復原上一筆」仍可按，
+   * 那是誤判復原的路徑。判定用 lib/bracket 的共用函式，
+   * 和 addLadderFinish 的伺服器端守門是同一份邏輯。
    */
-  const decided = sA !== sB && (sA >= WIN_POINTS || sB >= WIN_POINTS);
+  const decided = isDecided(sA, sB);
   const winnerSide: 1 | 2 | null = decided ? (sA > sB ? 1 : 2) : null;
   const winner = winnerSide === 1 ? playerA : playerB;
 

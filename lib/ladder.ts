@@ -183,6 +183,9 @@ const ERROR_TEXT: Record<string, string> = {
   bad_status: "這場對戰的狀態已經改變，請重新整理",
   not_participant: "你不是這場對戰的選手",
   bad_score: "比分不正確：不可相同、也不可為負",
+  // 單場上限 6 分：3 分時打出 Xtreme（+3）就是合法的最高分
+  score_out_of_range: "比分超過上限：一場最多 6 分，請用「−1」或「復原上一筆」修正後再回報",
+  match_already_decided: "本場已分出勝負，不能再加分",
   not_loser: "只有敗方可以確認結果",
   rpc_failed: "系統忙碌中，請稍後再試",
 };
