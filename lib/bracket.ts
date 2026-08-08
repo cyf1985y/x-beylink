@@ -19,12 +19,7 @@ export type DbMatch = {
 /** BEYBLADE X 計分規則：先取得 4 分者獲勝 */
 export const WIN_POINTS = 4;
 
-/** 得分方式（官方 X 規則） */
-export const FINISH_TYPES = [
-  { points: 1, label: "Spin", zh: "Spin Finish" },
-  { points: 2, label: "Over / Burst", zh: "Over・Burst Finish" },
-  { points: 3, label: "Xtreme", zh: "Xtreme Finish" },
-] as const;
+/** 得分方式（官方 X 規則）見 lib/finish.ts 的 FINISH_OPTIONS */
 
 /** 決賽輪數：bracketSize = 2^rounds */
 export function totalRounds(bracketSize: number): number {

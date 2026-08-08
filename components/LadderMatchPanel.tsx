@@ -9,9 +9,26 @@ import {
   reportResult,
   type MatchState,
 } from "@/app/ladder/actions";
+import {
+  addLadderFinish,
+  addLadderFoul,
+  addLadderReshoot,
+  resetLadderRounds,
+  undoLadderRound,
+  type LadderScoreResult,
+} from "@/app/ladder/scoring";
 import { AUTO_CONFIRM_MINUTES } from "@/lib/ladder";
-import { WIN_POINTS, FINISH_TYPES } from "@/lib/bracket";
-import { beepScore, beepUndo, fanfare, vibrate } from "@/lib/sound";
+import { WIN_POINTS } from "@/lib/bracket";
+import {
+  finishPoints,
+  scoreFromRounds,
+  type FinishType,
+  type ReshootReason,
+} from "@/lib/finish";
+import { beepScore, beepUndo, fanfare } from "@/lib/sound";
+import { FinishGrid, ReshootButton } from "@/components/FinishButtons";
+import { RoundCountdown } from "@/components/RoundCountdown";
+import { RoundTimeline } from "@/components/RoundTimeline";
 
 type P = { id: string; nickname: string; avatar: string };
 
@@ -20,9 +37,10 @@ const POLL_MS = 5_000;
 /**
  * 天梯對戰面板：計分 → 回報 → 敗方確認／異議。
  *
- * 計分沿用賽事計分板的規則與音效（先取 4 分、Spin/Over・Burst/Xtreme ＋1／＋2／＋3），
- * 但天梯只保留最終比分（ladder_matches 沒有逐點紀錄表），因此計分在本機累計，
- * 按下「回報結果」才寫進資料庫。積分一律由 ladder_confirm_result 計算。
+ * 計分沿用賽事計分板的規則與音效（先取 4 分、四種結束方式、重射、倒數），
+ * 逐回合寫進 match_points（ladder_match_id），因此雙方裝置看到的比分一致、
+ * 重整也不會丟。最終比分仍由 ladder_report_result 回報，積分一律由
+ * ladder_confirm_result 計算。
  */
 export function LadderMatchPanel({
   matchId,
@@ -40,13 +58,14 @@ export function LadderMatchPanel({
 }) {
   const router = useRouter();
   const [state, setState] = useState<MatchState>(initial);
-  const [sA, setSA] = useState(0);
-  const [sB, setSB] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const live = state.status === "playing" || state.status === "pending_confirm";
+
+  // 進行中的比分由回合紀錄推導（side 1 = playerA、side 2 = playerB）
+  const { s1: sA, s2: sB } = scoreFromRounds(state.rounds);
 
   const refresh = useCallback(async () => {
     const s = await getMatchState(matchId);
@@ -73,12 +92,36 @@ export function LadderMatchPanel({
   const myScore = iAmA ? state.scoreA : state.scoreB;
   const oppScore = iAmA ? state.scoreB : state.scoreA;
 
-  const add = (side: "a" | "b", points: number) => {
-    beepScore(side === "a" ? 1 : 2, points);
-    if (points > 0) vibrate(30);
-    if (side === "a") setSA((v) => Math.max(0, v + points));
-    else setSB((v) => Math.max(0, v + points));
+  /** 回合操作共用流程：寫入 → 用回傳的回合紀錄更新畫面 */
+  const score = async (
+    fn: (playerId: string) => Promise<LadderScoreResult>,
+    onBefore?: () => void
+  ) => {
+    if (!myPlayerId) return;
+    setError(null);
+    setMessage(null);
+    onBefore?.();
+    setBusy(true);
+    const r = await fn(myPlayerId);
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.error ?? "計分失敗");
+      return;
+    }
+    if (r.rounds) setState((s) => ({ ...s, rounds: r.rounds ?? s.rounds }));
   };
+
+  const addFinish = (side: 1 | 2) => (f: FinishType) =>
+    score(
+      (pid) => addLadderFinish(matchId, pid, side, f),
+      () => beepScore(side, finishPoints(f))
+    );
+
+  const addFoul = (side: 1 | 2) => () =>
+    score(
+      (pid) => addLadderFoul(matchId, pid, side),
+      () => beepUndo()
+    );
 
   const decided = sA !== sB && (sA >= WIN_POINTS || sB >= WIN_POINTS);
 
@@ -146,31 +189,6 @@ export function LadderMatchPanel({
     </div>
   );
 
-  const Points = ({ side }: { side: "a" | "b" }) => (
-    <div className="flex flex-1 gap-1.5">
-      {FINISH_TYPES.map((f) => (
-        <button
-          key={f.label}
-          type="button"
-          disabled={busy}
-          onClick={() => add(side, f.points)}
-          className={`flex-1 rounded-xl border-2 py-2 transition active:scale-95 disabled:opacity-30 ${
-            side === "a"
-              ? "border-cyanx/50 bg-cyanx/10"
-              : "border-red-400/50 bg-red-500/10"
-          }`}
-        >
-          <span className="block font-num text-lg font-bold leading-none">
-            ＋{f.points}
-          </span>
-          <span className="mt-0.5 block text-[10px] text-slate-400">
-            {f.label}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-
   return (
     <div className="space-y-4">
       {/* 比分顯示 */}
@@ -194,40 +212,77 @@ export function LadderMatchPanel({
       {state.status === "playing" && isParticipant && (
         <section className="card-x p-4">
           <p className="text-center text-xs text-slate-400">
-            先取 {WIN_POINTS} 分獲勝｜任一方計分後由該裝置回報
+            先取 {WIN_POINTS} 分獲勝｜天梯沒有裁判，開始回合由你們自己喊
           </p>
-          <div className="mt-3 flex gap-2">
-            <Points side="a" />
-            <Points side="b" />
+
+          <div className="mt-3">
+            <RoundCountdown disabled={busy} />
           </div>
+
+          <div className="mt-3 space-y-3">
+            {([1, 2] as const).map((side) => {
+              const p = side === 1 ? playerA : playerB;
+              return (
+                <div key={side}>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-sm font-bold text-slate-300">
+                      <span className="mr-1">{p.avatar}</span>
+                      {p.nickname} 得分
+                    </span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={addFoul(side)}
+                      className="rounded-lg border border-arena-line px-2.5 py-1 text-xs text-slate-500 transition hover:border-red-400 hover:text-red-300 disabled:opacity-40"
+                    >
+                      −1 犯規
+                    </button>
+                  </div>
+                  <FinishGrid
+                    side={side}
+                    disabled={busy}
+                    onPick={addFinish(side)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-3">
+            <ReshootButton
+              disabled={busy}
+              onPick={(reason: ReshootReason) =>
+                score((pid) => addLadderReshoot(matchId, pid, reason))
+              }
+            />
+          </div>
+
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               disabled={busy}
-              onClick={() => add("a", -1)}
-              className="flex-1 rounded-xl border border-cyanx/30 py-1.5 text-xs text-cyanx/70 disabled:opacity-30"
+              onClick={() =>
+                score(
+                  (pid) => undoLadderRound(matchId, pid),
+                  () => beepUndo()
+                )
+              }
+              className="flex-1 rounded-xl border border-arena-line py-2 text-xs text-slate-400 transition hover:border-gold hover:text-gold disabled:opacity-40"
             >
-              藍方 −1
+              ↩ 復原上一筆
             </button>
             <button
               type="button"
               disabled={busy}
-              onClick={() => {
-                beepUndo();
-                setSA(0);
-                setSB(0);
-              }}
-              className="flex-1 rounded-xl border border-arena-line py-1.5 text-xs text-slate-400 disabled:opacity-30"
+              onClick={() =>
+                score(
+                  (pid) => resetLadderRounds(matchId, pid),
+                  () => beepUndo()
+                )
+              }
+              className="flex-1 rounded-xl border border-arena-line py-2 text-xs text-slate-400 transition hover:border-red-400 hover:text-red-300 disabled:opacity-40"
             >
               歸零重來
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => add("b", -1)}
-              className="flex-1 rounded-xl border border-red-400/30 py-1.5 text-xs text-red-300/70 disabled:opacity-30"
-            >
-              紅方 −1
             </button>
           </div>
 
@@ -379,6 +434,12 @@ export function LadderMatchPanel({
           ✅ {message}
         </p>
       )}
+
+      <RoundTimeline
+        rounds={state.rounds}
+        player1={playerA}
+        player2={playerB}
+      />
 
       {isParticipant && (
         <p className="text-center text-xs text-slate-600">

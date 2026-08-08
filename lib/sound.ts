@@ -43,6 +43,19 @@ function tone(
   }
 }
 
+/**
+ * 解鎖／喚醒 AudioContext。
+ * 倒數的後三拍是由 timer 觸發的，必須在使用者按下按鈕的當下先把 context 叫醒，
+ * 否則 iOS Safari 會把之後排定的聲音全部吞掉。
+ */
+export function resumeAudio() {
+  try {
+    void ctx()?.resume?.();
+  } catch {
+    /* ignore */
+  }
+}
+
 export function vibrate(pattern: number | number[]) {
   try {
     navigator.vibrate?.(pattern);
@@ -72,6 +85,26 @@ export function fanfare() {
     tone(f, i * 0.14, 0.22, "triangle", 0.12)
   );
   vibrate([120, 60, 120, 60, 220]);
+}
+
+/** 重射：兩聲下滑的中性提示音（不是得分、也不是扣分） */
+export function beepReshoot() {
+  tone(420, 0, 0.1, "sawtooth", 0.06);
+  tone(300, 0.1, 0.16, "sawtooth", 0.06);
+  vibrate([40, 40, 40]);
+}
+
+/** 倒數 3、2、1：一拍一聲，越接近 GO 越高 */
+export function beepCountdown(n: 3 | 2 | 1) {
+  tone(440 + (3 - n) * 90, 0, 0.18, "square", 0.1);
+  vibrate(70);
+}
+
+/** GO SHOOT！：拉高的雙音 */
+export function beepGoShoot() {
+  tone(880, 0, 0.12, "square", 0.11);
+  tone(1319, 0.1, 0.3, "triangle", 0.12);
+  vibrate([90, 50, 200]);
 }
 
 /** 中文語音播報（可關閉） */

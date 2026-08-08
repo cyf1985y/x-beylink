@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { requireScorer } from "@/lib/scorer";
 import { loadMatches, roundName, finalRoundOf } from "@/lib/bracket";
+import { getMatchRounds } from "@/app/referee/scoring";
 import { ScoringPanel, type ScoringMatch } from "@/components/ScoringPanel";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function RefereeMatchPage({
     };
   };
 
+  const rounds = await getMatchRounds(match.id);
   const finalRound = finalRoundOf(matches);
   const view: ScoringMatch = {
     id: match.id,
@@ -76,7 +78,7 @@ export default async function RefereeMatchPage({
       <h1 className="mt-3 truncate text-lg font-black">{event.title}</h1>
 
       <div className="mt-4">
-        <ScoringPanel match={view} />
+        <ScoringPanel match={view} initialRounds={rounds} />
       </div>
 
       <p className="mt-6 text-center text-xs text-slate-600">

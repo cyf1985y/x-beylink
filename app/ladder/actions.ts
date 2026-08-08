@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
+import { getLadderRounds } from "@/app/ladder/scoring";
+import { type RoundEntry } from "@/lib/finish";
 import {
   DbGymPublic,
   DbLadderMatch,
@@ -333,6 +335,8 @@ export type MatchState = {
   /** 結算後雙方最新積分 */
   ratingA: number | null;
   ratingB: number | null;
+  /** 逐回合紀錄（時間軸與進行中比分都由這裡推導） */
+  rounds: RoundEntry[];
 };
 
 /** 對戰即時狀態（對戰頁輪詢） */
@@ -344,6 +348,8 @@ export async function getMatchState(matchId: string): Promise<MatchState | null>
     .eq("id", matchId)
     .maybeSingle<DbLadderMatch>();
   if (!m) return null;
+
+  const rounds = await getLadderRounds(matchId);
 
   let ratingA: number | null = null;
   let ratingB: number | null = null;
@@ -369,5 +375,6 @@ export async function getMatchState(matchId: string): Promise<MatchState | null>
     reportedBy: m.reported_by,
     ratingA,
     ratingB,
+    rounds,
   };
 }
