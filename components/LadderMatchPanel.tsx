@@ -106,7 +106,16 @@ export function LadderMatchPanel({
     if (!r.ok) setError(r.error ?? "計分失敗");
   };
 
+  /**
+   * 分出勝負：任一方達 4 分且雙方不同分。
+   *
+   * 上限不是 4——3 分時打出 Xtreme 會變成 6 分，所以合法的最高分是 6，
+   * 條件必須是 >= 而不是 ==。達標後鎖住計分（比照賽事版），
+   * 但「−1」與「復原上一筆」仍可按，那是誤判復原的路徑。
+   */
   const decided = sA !== sB && (sA >= WIN_POINTS || sB >= WIN_POINTS);
+  const winnerSide: 1 | 2 | null = decided ? (sA > sB ? 1 : 2) : null;
+  const winner = winnerSide === 1 ? playerA : playerB;
 
   const submit = async () => {
     if (!myPlayerId) return;
@@ -179,7 +188,7 @@ export function LadderMatchPanel({
         <button
           key={f.type}
           type="button"
-          disabled={busy}
+          disabled={busy || decided}
           onClick={() =>
             runRound(
               (pid) => addLadderFinish(matchId, pid, side, f.type),
@@ -232,7 +241,7 @@ export function LadderMatchPanel({
 
           {/* 天梯沒有裁判，這顆按鈕就是裁判 */}
           <div className="mt-3">
-            <RoundCountdown disabled={busy} />
+            <RoundCountdown disabled={busy || decided} />
             <p className="mt-1.5 text-center text-[11px] text-slate-500">
               按下會全螢幕倒數 3、2、1、GO SHOOT（有聲音）
             </p>
@@ -257,7 +266,7 @@ export function LadderMatchPanel({
               藍方 −1
             </button>
             <ReshootButton
-              disabled={busy}
+              disabled={busy || decided}
               onPick={(reason: ReshootReason) =>
                 runRound(
                   (pid) => addLadderReshoot(matchId, pid, reason),
@@ -308,10 +317,29 @@ export function LadderMatchPanel({
             </button>
           </div>
 
+          {/* 分出勝負：計分已鎖，回報成為主要動作 */}
+          {decided && (
+            <div className="mt-4 rounded-xl border border-gold/60 bg-gold/10 p-3 text-center">
+              <p className="text-base font-black text-gold">
+                🏆 {winnerSide === 1 ? "藍方" : "紅方"} {winner.nickname} 獲勝
+              </p>
+              <p className="font-num text-3xl font-bold leading-tight">
+                {sA} : {sB}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                判錯了？按「−1」或「復原上一筆」就能解鎖繼續打
+              </p>
+            </div>
+          )}
+
           <button
             onClick={submit}
             disabled={busy || sA === sB}
-            className="btn-x mt-4 w-full disabled:opacity-40"
+            className={
+              decided
+                ? "btn-gold mt-3 w-full disabled:opacity-40"
+                : "mt-4 w-full rounded-xl border border-arena-line py-2.5 text-sm font-bold text-slate-300 transition active:scale-95 hover:border-cyanx/60 disabled:opacity-40"
+            }
           >
             {sA === sB
               ? "比分相同，無法回報"
@@ -320,8 +348,9 @@ export function LadderMatchPanel({
                 : `提前回報 ${sA}:${sB}`}
           </button>
           <p className="mt-2 text-center text-[11px] text-slate-500">
-            回報後由敗方確認才計分，{AUTO_CONFIRM_MINUTES}{" "}
-            分鐘未確認自動成立。
+            {decided
+              ? `回報後由敗方確認才計分，${AUTO_CONFIRM_MINUTES} 分鐘未確認自動成立。`
+              : "還沒打完——對手中途離場之類的狀況才需要提前回報。"}
           </p>
         </section>
       )}
