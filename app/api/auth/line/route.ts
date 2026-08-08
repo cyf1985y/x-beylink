@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { lineAuthorizeUrl } from "@/lib/line";
+import { createOAuthState, safeNext } from "@/lib/oauthState";
 
 export const dynamic = "force-dynamic";
 
-/** 導向 LINE 授權頁，並用 cookie 保存 state 防 CSRF；?next=/path 登入後導回 */
+/**
+ * 導向 LINE 授權頁。
+ *
+ * CSRF state 是簽章過的短效 JWT，直接掛在授權 URL 上，不寫任何 cookie——
+ * LINE app-to-app 授權回程讀不到我們寫的 cookie（見 lib/oauthState.ts）。
+ * ?next=/path 登入後導回的頁面也一併塞進 state payload。
+ */
 export async function GET(req: NextRequest) {
-  const state = crypto.randomUUID();
-  const cookieOpts = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 10 * 60,
-  };
-  cookies().set("xb_oauth_state", state, cookieOpts);
-
-  // 登入後返回頁（僅限站內路徑，防 open redirect）
-  const next = new URL(req.url).searchParams.get("next");
-  if (next && next.startsWith("/") && !next.startsWith("//")) {
-    cookies().set("xb_next", next, cookieOpts);
-  }
+  const next = safeNext(new URL(req.url).searchParams.get("next"));
+  const state = await createOAuthState(next);
   return NextResponse.redirect(lineAuthorizeUrl(state));
 }
