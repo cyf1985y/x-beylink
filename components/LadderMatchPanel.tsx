@@ -3,15 +3,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  addLadderFinish,
+  addLadderPenalty,
+  addLadderReshoot,
+  clearLadderRounds,
   confirmResult,
   disputeResult,
+  getLadderRounds,
   getMatchState,
   reportResult,
+  undoLadderRound,
+  type LadderRoundsResult,
   type MatchState,
 } from "@/app/ladder/actions";
 import { AUTO_CONFIRM_MINUTES } from "@/lib/ladder";
-import { WIN_POINTS, FINISH_TYPES } from "@/lib/bracket";
-import { beepScore, beepUndo, fanfare, vibrate } from "@/lib/sound";
+import { WIN_POINTS, FINISH_TYPES, type ReshootReason } from "@/lib/bracket";
+import { scoreOf, type DbMatchPoint } from "@/lib/rounds";
+import { beepScore, beepUndo, beepReshoot, fanfare } from "@/lib/sound";
+import { RoundCountdown } from "@/components/RoundCountdown";
+import { ReshootButton } from "@/components/ReshootButton";
+import { RoundTimeline } from "@/components/RoundTimeline";
 
 type P = { id: string; nickname: string; avatar: string };
 
@@ -20,9 +31,10 @@ const POLL_MS = 5_000;
 /**
  * 天梯對戰面板：計分 → 回報 → 敗方確認／異議。
  *
- * 計分沿用賽事計分板的規則與音效（先取 4 分、Spin/Over・Burst/Xtreme ＋1／＋2／＋3），
- * 但天梯只保留最終比分（ladder_matches 沒有逐點紀錄表），因此計分在本機累計，
- * 按下「回報結果」才寫進資料庫。積分一律由 ladder_confirm_result 計算。
+ * 計分沿用賽事計分板的規則與音效（先取 4 分、四種結束方式、重射不計分），
+ * 逐回合寫進 match_points（帶 ladder_match_id），所以兩支手機看到的比分一致，
+ * 重整也不會丟；按下「回報結果」才把最終比分寫進 ladder_matches。
+ * 積分一律由 ladder_confirm_result 計算。
  */
 export function LadderMatchPanel({
   matchId,
@@ -30,6 +42,7 @@ export function LadderMatchPanel({
   playerB,
   myPlayerId,
   initial,
+  initialRounds,
 }: {
   matchId: string;
   playerA: P;
@@ -37,20 +50,25 @@ export function LadderMatchPanel({
   /** 我在這場的選手 id；旁觀者為 null */
   myPlayerId: string | null;
   initial: MatchState;
+  initialRounds: DbMatchPoint[];
 }) {
   const router = useRouter();
   const [state, setState] = useState<MatchState>(initial);
-  const [sA, setSA] = useState(0);
-  const [sB, setSB] = useState(0);
+  const [rounds, setRounds] = useState<DbMatchPoint[]>(initialRounds);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const live = state.status === "playing" || state.status === "pending_confirm";
+  const { s1: sA, s2: sB } = scoreOf(rounds);
 
   const refresh = useCallback(async () => {
-    const s = await getMatchState(matchId);
+    const [s, r] = await Promise.all([
+      getMatchState(matchId),
+      getLadderRounds(matchId),
+    ]);
     if (s) setState(s);
+    if (r.rounds) setRounds(r.rounds);
   }, [matchId]);
 
   useEffect(() => {
@@ -73,11 +91,19 @@ export function LadderMatchPanel({
   const myScore = iAmA ? state.scoreA : state.scoreB;
   const oppScore = iAmA ? state.scoreB : state.scoreA;
 
-  const add = (side: "a" | "b", points: number) => {
-    beepScore(side === "a" ? 1 : 2, points);
-    if (points > 0) vibrate(30);
-    if (side === "a") setSA((v) => Math.max(0, v + points));
-    else setSB((v) => Math.max(0, v + points));
+  /** 逐回合計分：寫進資料庫後以回傳的回合列為準 */
+  const runRound = async (
+    fn: (playerId: string) => Promise<LadderRoundsResult>,
+    onBefore?: () => void
+  ) => {
+    if (!myPlayerId) return;
+    setError(null);
+    onBefore?.();
+    setBusy(true);
+    const r = await fn(myPlayerId);
+    setBusy(false);
+    if (r.rounds) setRounds(r.rounds);
+    if (!r.ok) setError(r.error ?? "計分失敗");
   };
 
   const decided = sA !== sB && (sA >= WIN_POINTS || sB >= WIN_POINTS);
@@ -146,25 +172,32 @@ export function LadderMatchPanel({
     </div>
   );
 
-  const Points = ({ side }: { side: "a" | "b" }) => (
-    <div className="flex flex-1 gap-1.5">
+  /** 該側的四顆結束方式（2×2） */
+  const Finishes = ({ side }: { side: 1 | 2 }) => (
+    <div className="grid flex-1 grid-cols-2 gap-1.5">
       {FINISH_TYPES.map((f) => (
         <button
-          key={f.label}
+          key={f.type}
           type="button"
           disabled={busy}
-          onClick={() => add(side, f.points)}
-          className={`flex-1 rounded-xl border-2 py-2 transition active:scale-95 disabled:opacity-30 ${
-            side === "a"
+          onClick={() =>
+            runRound(
+              (pid) => addLadderFinish(matchId, pid, side, f.type),
+              () => beepScore(side, f.points)
+            )
+          }
+          className={`rounded-xl border-2 py-2.5 transition active:scale-95 disabled:opacity-30 ${
+            side === 1
               ? "border-cyanx/50 bg-cyanx/10"
               : "border-red-400/50 bg-red-500/10"
           }`}
         >
-          <span className="block font-num text-lg font-bold leading-none">
-            ＋{f.points}
-          </span>
-          <span className="mt-0.5 block text-[10px] text-slate-400">
+          <span className="block text-base leading-none">{f.icon}</span>
+          <span className="mt-0.5 block text-xs font-black leading-none">
             {f.label}
+          </span>
+          <span className="mt-0.5 block font-num text-[10px] text-slate-400">
+            ＋{f.points}
           </span>
         </button>
       ))}
@@ -196,38 +229,82 @@ export function LadderMatchPanel({
           <p className="text-center text-xs text-slate-400">
             先取 {WIN_POINTS} 分獲勝｜任一方計分後由該裝置回報
           </p>
+
+          {/* 天梯沒有裁判，這顆按鈕就是裁判 */}
+          <div className="mt-3">
+            <RoundCountdown disabled={busy} />
+            <p className="mt-1.5 text-center text-[11px] text-slate-500">
+              按下會全螢幕倒數 3、2、1、GO SHOOT（有聲音）
+            </p>
+          </div>
+
           <div className="mt-3 flex gap-2">
-            <Points side="a" />
-            <Points side="b" />
+            <Finishes side={1} />
+            <Finishes side={2} />
           </div>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               disabled={busy}
-              onClick={() => add("a", -1)}
+              onClick={() =>
+                runRound(
+                  (pid) => addLadderPenalty(matchId, pid, 1),
+                  () => beepUndo()
+                )
+              }
               className="flex-1 rounded-xl border border-cyanx/30 py-1.5 text-xs text-cyanx/70 disabled:opacity-30"
             >
               藍方 −1
             </button>
+            <ReshootButton
+              disabled={busy}
+              onPick={(reason: ReshootReason) =>
+                runRound(
+                  (pid) => addLadderReshoot(matchId, pid, reason),
+                  () => beepReshoot()
+                )
+              }
+            />
             <button
               type="button"
               disabled={busy}
-              onClick={() => {
-                beepUndo();
-                setSA(0);
-                setSB(0);
-              }}
+              onClick={() =>
+                runRound(
+                  (pid) => addLadderPenalty(matchId, pid, 2),
+                  () => beepUndo()
+                )
+              }
+              className="flex-1 rounded-xl border border-red-400/30 py-1.5 text-xs text-red-300/70 disabled:opacity-30"
+            >
+              紅方 −1
+            </button>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                runRound(
+                  (pid) => undoLadderRound(matchId, pid),
+                  () => beepUndo()
+                )
+              }
               className="flex-1 rounded-xl border border-arena-line py-1.5 text-xs text-slate-400 disabled:opacity-30"
             >
-              歸零重來
+              ↩ 復原上一筆
             </button>
             <button
               type="button"
               disabled={busy}
-              onClick={() => add("b", -1)}
-              className="flex-1 rounded-xl border border-red-400/30 py-1.5 text-xs text-red-300/70 disabled:opacity-30"
+              onClick={() =>
+                runRound(
+                  (pid) => clearLadderRounds(matchId, pid),
+                  () => beepUndo()
+                )
+              }
+              className="flex-1 rounded-xl border border-arena-line py-1.5 text-xs text-slate-400 disabled:opacity-30"
             >
-              紅方 −1
+              歸零重來
             </button>
           </div>
 
@@ -379,6 +456,8 @@ export function LadderMatchPanel({
           ✅ {message}
         </p>
       )}
+
+      <RoundTimeline rows={rounds} player1={playerA} player2={playerB} />
 
       {isParticipant && (
         <p className="text-center text-xs text-slate-600">

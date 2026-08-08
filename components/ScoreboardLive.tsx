@@ -4,12 +4,16 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   getMatchScore,
-  addPoint,
+  addFinish,
+  addPenalty,
+  addReshoot,
   undoLastPoint,
   type ScoreResult,
 } from "@/app/referee/scoring";
-import { WIN_POINTS, FINISH_TYPES } from "@/lib/bracket";
-import { beepScore, beepUndo, fanfare, speak, vibrate } from "@/lib/sound";
+import { WIN_POINTS, FINISH_TYPES, type ReshootReason } from "@/lib/bracket";
+import { beepScore, beepUndo, beepReshoot, fanfare, speak } from "@/lib/sound";
+import { RoundCountdown } from "@/components/RoundCountdown";
+import { ReshootButton } from "@/components/ReshootButton";
 
 type P = { id: string; nickname: string; avatar: string };
 
@@ -142,31 +146,32 @@ export function ScoreboardLive({
     );
   };
 
-  /** 該側的 ＋1／＋2／＋3 橫排一列 */
-  const PointButtons = ({ side }: { side: 1 | 2 }) => (
-    <div className="flex flex-1 gap-2">
+  /** 該側的四顆結束方式（2×2，站在盤邊也按得到） */
+  const FinishButtons = ({ side }: { side: 1 | 2 }) => (
+    <div className="grid flex-1 grid-cols-2 gap-2">
       {FINISH_TYPES.map((f) => (
         <button
-          key={f.label}
+          key={f.type}
           type="button"
           disabled={pending || !!winnerId}
           onClick={() =>
             run(
-              () => addPoint(eventId, matchId, side, f.points),
+              () => addFinish(eventId, matchId, side, f.type),
               () => beepScore(side, f.points)
             )
           }
-          className={`flex-1 rounded-xl border-2 py-[1.8vh] text-center transition active:scale-95 disabled:opacity-30 ${
+          className={`rounded-xl border-2 py-[1.4vh] text-center transition active:scale-95 disabled:opacity-30 ${
             side === 1
               ? "border-cyanx/50 bg-cyanx/10 hover:bg-cyanx/25"
               : "border-red-400/50 bg-red-500/10 hover:bg-red-500/25"
           }`}
         >
-          <span className="block font-num text-[3.2vh] font-bold leading-none">
-            ＋{f.points}
-          </span>
-          <span className="mt-0.5 block text-[1.4vh] text-slate-400">
+          <span className="block text-[2.4vh] leading-none">{f.icon}</span>
+          <span className="mt-0.5 block text-[2vh] font-black leading-none">
             {f.label}
+          </span>
+          <span className="mt-0.5 block font-num text-[1.5vh] text-slate-400">
+            ＋{f.points}
           </span>
         </button>
       ))}
@@ -179,7 +184,7 @@ export function ScoreboardLive({
       disabled={pending}
       onClick={() =>
         run(
-          () => addPoint(eventId, matchId, side, -1),
+          () => addPenalty(eventId, matchId, side),
           () => beepUndo()
         )
       }
@@ -228,14 +233,29 @@ export function ScoreboardLive({
 
       {canScore ? (
         <>
-          {/* 得分：兩側各一列 ＋1／＋2／＋3 */}
+          {/* 就位 → 3、2、1、GO SHOOT → 對戰 → 判定 */}
+          <RoundCountdown
+            disabled={!!winnerId}
+            className="mb-2 w-full rounded-xl border-2 border-gold/70 bg-gold/15 py-[1.6vh] text-[2.4vh] font-black tracking-widest text-gold transition active:scale-95 disabled:opacity-30"
+          />
+          {/* 得分：兩側各一組結束方式 */}
           <div className="flex gap-3">
-            <PointButtons side={1} />
-            <PointButtons side={2} />
+            <FinishButtons side={1} />
+            <FinishButtons side={2} />
           </div>
-          {/* 修正：犯規扣分與復原同一列 */}
+          {/* 修正：犯規扣分、重射與復原同一列 */}
           <div className="mt-2 flex gap-2">
             <MinusButton side={1} />
+            <ReshootButton
+              disabled={pending || !!winnerId}
+              onPick={(reason: ReshootReason) =>
+                run(
+                  () => addReshoot(eventId, matchId, reason),
+                  () => beepReshoot()
+                )
+              }
+              className="flex-1 rounded-xl border border-slate-500/50 py-[1vh] text-[1.5vh] text-slate-300 transition hover:border-slate-300 disabled:opacity-30"
+            />
             <button
               type="button"
               disabled={pending}
@@ -247,7 +267,7 @@ export function ScoreboardLive({
               }
               className="flex-[1.4] rounded-xl border border-arena-line py-[1vh] text-[1.5vh] text-slate-400 transition hover:border-gold hover:text-gold disabled:opacity-30"
             >
-              ↩ 復原上一筆計分
+              ↩ 復原上一筆
             </button>
             <MinusButton side={2} />
           </div>

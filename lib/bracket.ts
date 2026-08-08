@@ -19,12 +19,66 @@ export type DbMatch = {
 /** BEYBLADE X 計分規則：先取得 4 分者獲勝 */
 export const WIN_POINTS = 4;
 
-/** 得分方式（官方 X 規則） */
+/** 結束方式（官方 X 規則）；Over 與 Burst 同為 2 分但要分開記錄 */
+export type FinishType = "spin" | "over" | "burst" | "xtreme";
+
 export const FINISH_TYPES = [
-  { points: 1, label: "Spin", zh: "Spin Finish" },
-  { points: 2, label: "Over / Burst", zh: "Over・Burst Finish" },
-  { points: 3, label: "Xtreme", zh: "Xtreme Finish" },
-] as const;
+  { type: "spin", points: 1, icon: "🌀", label: "Spin", zh: "Spin Finish" },
+  { type: "over", points: 2, icon: "💨", label: "Over", zh: "Over Finish" },
+  { type: "burst", points: 2, icon: "💥", label: "Burst", zh: "Burst Finish" },
+  { type: "xtreme", points: 3, icon: "⚡", label: "Xtreme", zh: "Xtreme Finish" },
+] as const satisfies ReadonlyArray<{
+  type: FinishType;
+  points: number;
+  icon: string;
+  label: string;
+  zh: string;
+}>;
+
+export const FINISH_POINTS: Record<FinishType, number> = {
+  spin: 1,
+  over: 2,
+  burst: 2,
+  xtreme: 3,
+};
+
+export function isFinishType(v: unknown): v is FinishType {
+  return typeof v === "string" && v in FINISH_POINTS;
+}
+
+export function finishMeta(type: FinishType) {
+  return FINISH_TYPES.find((f) => f.type === type)!;
+}
+
+/** 重射原因（官方規則要求不計分重來的情況） */
+export type ReshootReason =
+  | "false_start"
+  | "launch_miss"
+  | "midair_collision"
+  | "simultaneous"
+  | "self_ko"
+  | "other";
+
+export const RESHOOT_REASONS = [
+  { reason: "false_start", label: "搶跑" },
+  { reason: "launch_miss", label: "發射失誤" },
+  { reason: "midair_collision", label: "空中相撞" },
+  { reason: "simultaneous", label: "同時結束" },
+  { reason: "self_ko", label: "自摔（3 秒內無接觸）" },
+  { reason: "other", label: "其他" },
+] as const satisfies ReadonlyArray<{ reason: ReshootReason; label: string }>;
+
+const RESHOOT_LABEL = new Map<string, string>(
+  RESHOOT_REASONS.map((r) => [r.reason, r.label])
+);
+
+export function isReshootReason(v: unknown): v is ReshootReason {
+  return typeof v === "string" && RESHOOT_LABEL.has(v);
+}
+
+export function reshootLabel(reason: string | null): string {
+  return (reason && RESHOOT_LABEL.get(reason)) ?? "其他";
+}
 
 /** 決賽輪數：bracketSize = 2^rounds */
 export function totalRounds(bracketSize: number): number {

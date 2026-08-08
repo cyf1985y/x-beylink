@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { DbLadderMatch, runLadderMaintenance } from "@/lib/ladder";
+import { loadLadderRounds } from "@/lib/rounds";
 import { getMatchState } from "@/app/ladder/actions";
 import { LadderMatchPanel } from "@/components/LadderMatchPanel";
 
@@ -27,7 +28,7 @@ export default async function LadderMatchPage({
     .maybeSingle<DbLadderMatch>();
   if (!match) notFound();
 
-  const [{ data: players }, { data: mine }, state] = await Promise.all([
+  const [{ data: players }, { data: mine }, state, rounds] = await Promise.all([
     db
       .from("players")
       .select("id,nickname,avatar")
@@ -39,6 +40,7 @@ export default async function LadderMatchPage({
       .eq("user_id", session.uid)
       .returns<Array<{ id: string }>>(),
     getMatchState(params.id),
+    loadLadderRounds(db, params.id),
   ]);
   if (!state) notFound();
 
@@ -71,6 +73,7 @@ export default async function LadderMatchPage({
           playerB={playerB}
           myPlayerId={myPlayerId}
           initial={state}
+          initialRounds={rounds}
         />
       </div>
     </main>

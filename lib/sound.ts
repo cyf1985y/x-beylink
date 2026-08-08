@@ -43,6 +43,15 @@ function tone(
   }
 }
 
+/**
+ * 解鎖音訊：iOS／Chrome 只在使用者手勢中允許出聲，
+ * 倒數的第一拍不是點擊當下才播，所以按鈕按下時要先把 AudioContext 喚醒。
+ */
+export function unlockAudio() {
+  const ac = ctx();
+  if (ac && ac.state === "suspended") ac.resume().catch(() => {});
+}
+
 export function vibrate(pattern: number | number[]) {
   try {
     navigator.vibrate?.(pattern);
@@ -72,6 +81,27 @@ export function fanfare() {
     tone(f, i * 0.14, 0.22, "triangle", 0.12)
   );
   vibrate([120, 60, 120, 60, 220]);
+}
+
+/** 倒數的一拍（3、2、1）：短促的中音嗶 */
+export function beepCount() {
+  tone(880, 0, 0.16, "square", 0.1);
+  vibrate(60);
+}
+
+/** GO SHOOT！：上揚三連音 */
+export function beepGoShoot() {
+  [988, 1319, 1568].forEach((f, i) =>
+    tone(f, i * 0.07, 0.3, "triangle", 0.12)
+  );
+  vibrate([90, 40, 160]);
+}
+
+/** 重射：中性的兩聲下行提示（不是得分也不是失誤） */
+export function beepReshoot() {
+  tone(520, 0, 0.1, "triangle", 0.09);
+  tone(390, 0.12, 0.16, "triangle", 0.09);
+  vibrate([60, 60, 60]);
 }
 
 /** 中文語音播報（可關閉） */
