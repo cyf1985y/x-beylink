@@ -2,6 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { TIERS, Tier, formatTaipei, isTier } from "@/lib/events";
+import {
+  BASE_RATING,
+  CLASS_LABEL,
+  DbLadderRating,
+  activeSeason,
+  ladderClassOf,
+  rankOf,
+} from "@/lib/ladder";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +68,18 @@ export default async function PlayerPage({
     : { data: [] as Array<{ id: string; title: string }> };
   const eventTitle = new Map((events ?? []).map((e) => [e.id, e.title]));
 
+  // 天梯：當季積分（沒有賽季或尚未出賽都不顯示區塊）
+  const season = await activeSeason(db);
+  const { data: ladder } = season
+    ? await db
+        .from("ladder_ratings")
+        .select("*")
+        .eq("season_id", season.id)
+        .eq("player_id", player.id)
+        .maybeSingle<DbLadderRating>()
+    : { data: null };
+  const ladderRank = ladder ? rankOf(ladder.rating) : null;
+
   const attendanceRate =
     player.attendance_total > 0
       ? Math.round((player.attendance_ok / player.attendance_total) * 100)
@@ -113,6 +133,58 @@ export default async function PlayerPage({
           </div>
         </div>
       </div>
+
+      {season && ladder && ladderRank && (
+        <section className="mt-6">
+          <h2 className="h-x">天梯</h2>
+          <div
+            className={`mt-3 rounded-2xl border p-4 ${ladderRank.border}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-4xl">{ladderRank.icon}</span>
+              <div className="min-w-0 flex-1">
+                <p className={`text-xl font-black ${ladderRank.text}`}>
+                  {ladderRank.label}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {season.name}｜{CLASS_LABEL[ladderClassOf(player.role)]}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-num text-2xl font-bold">{ladder.rating}</p>
+                <p className="text-[10px] tracking-wider text-slate-500">積分</p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-3 divide-x divide-arena-line border-t border-arena-line pt-3 text-center">
+              <div>
+                <p className="font-num text-lg font-bold text-slate-200">
+                  {ladder.matches}
+                </p>
+                <p className="text-[10px] tracking-wider text-slate-500">場次</p>
+              </div>
+              <div>
+                <p className="font-num text-lg font-bold text-emerald-300">
+                  {ladder.wins}勝 {ladder.losses}敗
+                </p>
+                <p className="text-[10px] tracking-wider text-slate-500">戰績</p>
+              </div>
+              <div>
+                <p className="font-num text-lg font-bold text-gold">
+                  {ladder.peak_rating}
+                </p>
+                <p className="text-[10px] tracking-wider text-slate-500">
+                  最高分
+                </p>
+              </div>
+            </div>
+            {ladder.rating === BASE_RATING && ladder.matches === 0 && (
+              <p className="mt-2 text-center text-xs text-slate-500">
+                還沒打過排位——到道館進場就能開始。
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="h-x text-gold">獎盃牆</h2>

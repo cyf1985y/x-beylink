@@ -61,6 +61,7 @@ export default async function HomePage() {
   const [session, events] = await Promise.all([getSession(), loadEvents()]);
 
   const tiles = [
+    { href: "/ladder", icon: "⚔️", label: "天梯排位", desc: "到道館 1v1 衝段位", wide: true },
     { href: "/me", icon: "🧑‍🚀", label: "選手檔案", desc: "建立與管理選手" },
     { href: "/records", icon: "🏆", label: "生涯戰績", desc: "獎盃與出席紀錄" },
     { href: "/registrations", icon: "🎟️", label: "已報名賽事", desc: "報名狀態與憑證" },
@@ -75,7 +76,9 @@ export default async function HomePage() {
           <Link
             key={t.label}
             href={t.href}
-            className="card-x p-4 text-center transition hover:-translate-y-0.5 hover:border-cyanx/60 hover:shadow-glow"
+            className={`card-x p-4 text-center transition hover:-translate-y-0.5 hover:border-cyanx/60 hover:shadow-glow ${
+              "wide" in t && t.wide ? "col-span-2" : ""
+            }`}
           >
             <span className="text-3xl">{t.icon}</span>
             <p className="mt-1.5 font-black">{t.label}</p>
