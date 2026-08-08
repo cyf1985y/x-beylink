@@ -14,6 +14,7 @@ import {
 } from "@/lib/ladder";
 import {
   FINISH_POINTS,
+  isDecided,
   isFinishType,
   isReshootReason,
   type FinishType,
@@ -200,8 +201,25 @@ export async function addLadderFinish(
   const auth = await requireLadderScorer(matchId, playerId);
   if (auth.error) return { ok: false, error: auth.error };
 
+  const db = supabaseAdmin();
+
+  // 已分出勝負就不再收分。前端也鎖了，但雙方各自的裝置都能計分，
+  // 對手那支手機在輪詢的空窗內畫面還沒鎖，所以這裡要擋第二道。
+  // 只擋加分：「−1」與「復原上一筆」照舊，那是誤判復原的路徑。
+  const before = await loadLadderRounds(db, matchId);
+  const { s1, s2 } = scoreOf(before);
+  if (isDecided(s1, s2)) {
+    return {
+      ok: false,
+      error: ladderErrorMessage("match_already_decided"),
+      scoreA: s1,
+      scoreB: s2,
+      rounds: before,
+    };
+  }
+
   const session = await getSession();
-  await supabaseAdmin().from("match_points").insert({
+  await db.from("match_points").insert({
     ladder_match_id: matchId,
     side,
     points: FINISH_POINTS[finish],

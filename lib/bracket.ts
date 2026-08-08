@@ -19,6 +19,16 @@ export type DbMatch = {
 /** BEYBLADE X 計分規則：先取得 4 分者獲勝 */
 export const WIN_POINTS = 4;
 
+/**
+ * 是否已分出勝負：任一方達 WIN_POINTS 且雙方不同分。
+ *
+ * 上限不是 4——3 分時打出 Xtreme（+3）會變成 6 分，合法最高分是 6，
+ * 所以條件必須是 >= 而不是 ==。純函式，前後端共用同一份判定避免走鐘。
+ */
+export function isDecided(s1: number, s2: number): boolean {
+  return s1 !== s2 && (s1 >= WIN_POINTS || s2 >= WIN_POINTS);
+}
+
 /** 結束方式（官方 X 規則）；Over 與 Burst 同為 2 分但要分開記錄 */
 export type FinishType = "spin" | "over" | "burst" | "xtreme";
 
