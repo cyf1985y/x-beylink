@@ -1,12 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-
-export type LadderTab = "battle" | "board";
-
-export function isLadderTab(v: unknown): v is LadderTab {
-  return v === "battle" || v === "board";
-}
+import { isLadderTab, type LadderTab } from "@/lib/ladderTabs";
 
 const TABS: Array<{ tab: LadderTab; label: string }> = [
   { tab: "battle", label: "⚔️ 對戰" },

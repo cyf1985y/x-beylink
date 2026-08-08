@@ -13,7 +13,8 @@ import {
   runLadderMaintenance,
 } from "@/lib/ladder";
 import { findActiveMatchId } from "@/app/ladder/actions";
-import { LadderTabs, isLadderTab } from "@/components/LadderTabs";
+import { LadderTabs } from "@/components/LadderTabs";
+import { isLadderTab } from "@/lib/ladderTabs";
 import { LeaderboardSwitch } from "@/components/LeaderboardSwitch";
 
 export const dynamic = "force-dynamic";
