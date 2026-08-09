@@ -11,6 +11,7 @@ import {
   ladderRpc,
   activeSeason,
   rankOf,
+  runLadderMaintenance,
 } from "@/lib/ladder";
 import {
   FINISH_POINTS,
@@ -414,6 +415,12 @@ export type GymState = {
 /** 道館即時狀態（10 秒輪詢） */
 export async function getGymState(gymId: string): Promise<GymState> {
   const db = supabaseAdmin();
+
+  // 逾時自動成立在這裡也補跑一次：現場的人是盯著道館頁在等下一場，
+  // 只靠 /ladder 頁載入與每日 cron 會讓守台的人卡著。
+  // 查詢走 partial index、skip locked，成本很低。
+  await runLadderMaintenance(db);
+
   const mine = await myPlayers();
   const myIds = new Set(mine.map((p) => p.id));
 
