@@ -11,10 +11,12 @@ import {
   disputeResult,
   getLadderRounds,
   getMatchState,
+  getNextMatch,
   reportResult,
   undoLadderRound,
   type LadderRoundsResult,
   type MatchState,
+  type NextMatch,
 } from "@/app/ladder/actions";
 import { AUTO_CONFIRM_MINUTES } from "@/lib/ladder";
 import {
@@ -24,7 +26,13 @@ import {
   type ReshootReason,
 } from "@/lib/bracket";
 import { scoreOf, type DbMatchPoint } from "@/lib/rounds";
-import { beepScore, beepUndo, beepReshoot, fanfare } from "@/lib/sound";
+import {
+  beepScore,
+  beepUndo,
+  beepReshoot,
+  beepNextMatch,
+  fanfare,
+} from "@/lib/sound";
 import { RoundCountdown } from "@/components/RoundCountdown";
 import { ReshootButton } from "@/components/ReshootButton";
 import { RoundTimeline } from "@/components/RoundTimeline";
@@ -32,6 +40,10 @@ import { RoundTimeline } from "@/components/RoundTimeline";
 type P = { id: string; nickname: string; avatar: string };
 
 const POLL_MS = 5_000;
+/** 結果成立後改查「下一場來了沒」，節奏可以慢一點 */
+const NEXT_POLL_MS = 10_000;
+/** 轉場橫幅自動進入的倒數秒數 */
+const NEXT_COUNTDOWN = 5;
 
 /**
  * 天梯對戰面板：計分 → 回報 → 敗方確認／異議。
@@ -64,6 +76,10 @@ export function LadderMatchPanel({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [next, setNext] = useState<NextMatch | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [visible, setVisible] = useState(true);
+
   const live = state.status === "playing" || state.status === "pending_confirm";
   const { s1: sA, s2: sB } = scoreOf(rounds);
 
@@ -76,11 +92,51 @@ export function LadderMatchPanel({
     if (r.rounds) setRounds(r.rounds);
   }, [matchId]);
 
+  // 手機會鎖屏、也會切到別的 app——背景時不要繼續打伺服器
   useEffect(() => {
-    if (!live) return;
+    const onVis = () => setVisible(document.visibilityState === "visible");
+    onVis();
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  useEffect(() => {
+    if (!live || !visible) return;
+    refresh(); // 切回前景立刻補一次，不用等下一個週期
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
-  }, [live, refresh]);
+  }, [live, visible, refresh]);
+
+  /**
+   * 結果成立後繼續盯著「我有沒有新的一場」。
+   * 守台的人贏完，挑戰者一發起挑戰就會建立新對戰——不盯的話這頁會停在
+   * 結果畫面，下一個挑戰者已經在等了卻沒人知道。找到就停止輪詢。
+   */
+  useEffect(() => {
+    if (state.status !== "confirmed" || !myPlayerId || !visible || next) return;
+    const check = async () => {
+      const r = await getNextMatch(myPlayerId, matchId);
+      if (r) {
+        setNext(r);
+        setCountdown(NEXT_COUNTDOWN);
+        beepNextMatch();
+      }
+    };
+    check();
+    const timer = setInterval(check, NEXT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [state.status, myPlayerId, visible, next, matchId]);
+
+  // 看得見的倒數，數完自動進場
+  useEffect(() => {
+    if (countdown === null || !next) return;
+    if (countdown <= 0) {
+      router.push(`/ladder/match/${next.matchId}`);
+      return;
+    }
+    const t = setTimeout(() => setCountdown(countdown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [countdown, next, router]);
 
   // 結算完成時更新頁面其他區塊（積分卡等）
   useEffect(() => {
@@ -95,6 +151,9 @@ export function LadderMatchPanel({
   const winnerIsMe = !!state.winner && state.winner === myPlayerId;
   const myScore = iAmA ? state.scoreA : state.scoreB;
   const oppScore = iAmA ? state.scoreB : state.scoreA;
+  /** 我這場的積分變化（轉場橫幅要一起顯示） */
+  const myDelta = iAmA ? state.deltaA : state.deltaB;
+  const myRating = iAmA ? state.ratingA : state.ratingB;
 
   /** 逐回合計分：寫進資料庫後以回傳的回合列為準 */
   const runRound = async (
@@ -388,22 +447,25 @@ export function LadderMatchPanel({
             </>
           )}
 
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={doConfirm}
-              disabled={busy}
-              className="btn-x flex-1 disabled:opacity-40"
-            >
-              確認
-            </button>
-            <button
-              onClick={doDispute}
-              disabled={busy}
-              className="flex-1 rounded-xl border border-red-400/50 bg-red-500/10 px-4 py-3 font-bold text-red-300 transition active:scale-95 disabled:opacity-40"
-            >
-              有問題
-            </button>
-          </div>
+          {/* 只有敗方能確認——勝方看到按鈕只會按出錯誤訊息，所以不顯示 */}
+          {!winnerIsMe && (
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={doConfirm}
+                disabled={busy}
+                className="btn-x flex-1 disabled:opacity-40"
+              >
+                確認
+              </button>
+              <button
+                onClick={doDispute}
+                disabled={busy}
+                className="flex-1 rounded-xl border border-red-400/50 bg-red-500/10 px-4 py-3 font-bold text-red-300 transition active:scale-95 disabled:opacity-40"
+              >
+                有問題
+              </button>
+            </div>
+          )}
           <p className="mt-3 text-[11px] text-slate-500">
             {AUTO_CONFIRM_MINUTES} 分鐘內未操作，這個結果會自動成立；
             對手接受下一場挑戰時，這場也會直接成立。
@@ -496,6 +558,64 @@ export function LadderMatchPanel({
         <p className="text-center text-xs text-slate-600">
           你以「{me.avatar} {me.nickname}」出賽
         </p>
+      )}
+
+      {/* 下一場來了：積分變化一起放進來，不必為了看它而按「稍等」 */}
+      {next && (
+        <div className="fixed inset-x-0 bottom-0 z-[80] border-t-2 border-cyanx/60 bg-arena-deep/95 p-3 pb-5 backdrop-blur">
+          <div className="mx-auto max-w-md">
+            <div className="flex items-center gap-3">
+              {myDelta !== null && (
+                <span className="shrink-0 rounded-xl border border-gold/50 bg-gold/10 px-3 py-1.5 text-center">
+                  <span
+                    className={`block font-num text-lg font-black leading-none ${
+                      myDelta > 0
+                        ? "text-emerald-300"
+                        : myDelta < 0
+                          ? "text-red-300"
+                          : "text-slate-400"
+                    }`}
+                  >
+                    {myDelta > 0 ? `+${myDelta}` : myDelta}
+                  </span>
+                  <span className="mt-0.5 block font-num text-[11px] text-slate-400">
+                    → {myRating ?? "—"}
+                  </span>
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block text-[11px] tracking-widest text-cyanx">
+                  ⚔️ 下一場
+                </span>
+                <span className="block truncate text-base font-black">
+                  {next.opponentAvatar} {next.opponentNickname} 向你挑戰
+                </span>
+              </span>
+              {countdown !== null && (
+                <span className="shrink-0 font-num text-4xl font-black leading-none text-cyanx text-glow">
+                  {countdown}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-2.5 flex gap-2">
+              <button
+                onClick={() => router.push(`/ladder/match/${next.matchId}`)}
+                className="btn-x flex-[2] py-2.5 text-sm"
+              >
+                進入對戰
+              </button>
+              {countdown !== null && (
+                <button
+                  onClick={() => setCountdown(null)}
+                  className="flex-1 rounded-xl border border-arena-line py-2.5 text-sm text-slate-400 transition hover:border-slate-300 hover:text-slate-200"
+                >
+                  稍等
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

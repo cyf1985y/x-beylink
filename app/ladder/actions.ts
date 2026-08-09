@@ -488,6 +488,51 @@ export async function getGymState(gymId: string): Promise<GymState> {
   };
 }
 
+export type NextMatch = {
+  matchId: string;
+  opponentNickname: string;
+  opponentAvatar: string;
+};
+
+/**
+ * 我的下一場對戰（排除目前這場）。
+ *
+ * 守台的人贏完之後，挑戰者一發起挑戰就會建立新的一場——這支讓對戰頁
+ * 在結果成立後還能發現它，不必先回道館再點一次。
+ */
+export async function getNextMatch(
+  playerId: string,
+  excludeMatchId: string
+): Promise<NextMatch | null> {
+  const mine = await requireMyPlayer(playerId);
+  if (mine.error) return null;
+
+  const db = supabaseAdmin();
+  const { data: m } = await db
+    .from("ladder_matches")
+    .select("id,player_a,player_b")
+    .in("status", ["playing", "pending_confirm"])
+    .or(`player_a.eq.${playerId},player_b.eq.${playerId}`)
+    .neq("id", excludeMatchId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; player_a: string; player_b: string }>();
+  if (!m) return null;
+
+  const opponentId = m.player_a === playerId ? m.player_b : m.player_a;
+  const { data: p } = await db
+    .from("players")
+    .select("nickname,avatar")
+    .eq("id", opponentId)
+    .maybeSingle<{ nickname: string; avatar: string }>();
+
+  return {
+    matchId: m.id,
+    opponentNickname: p?.nickname ?? "對手",
+    opponentAvatar: p?.avatar ?? "🌀",
+  };
+}
+
 /** 我尚未結束的天梯對戰（重整後回到現場用） */
 export async function findActiveMatchId(
   playerIds: string[]
