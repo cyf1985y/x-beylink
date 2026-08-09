@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   addLadderFinish,
@@ -44,6 +44,12 @@ const POLL_MS = 5_000;
 const NEXT_POLL_MS = 10_000;
 /** 轉場橫幅自動進入的倒數秒數 */
 const NEXT_COUNTDOWN = 5;
+/**
+ * 盯多久沒人來挑戰就停止輪詢。
+ * 店裡手機常常正面朝上放桌上沒鎖屏，visibilityState 擋不到，
+ * 不設上限就會前景輪詢到永遠。停掉後改由使用者手動查。
+ */
+const NEXT_WATCH_MS = 3 * 60_000;
 
 /**
  * 天梯對戰面板：計分 → 回報 → 敗方確認／異議。
@@ -79,6 +85,11 @@ export function LadderMatchPanel({
   const [next, setNext] = useState<NextMatch | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [visible, setVisible] = useState(true);
+  /** 盯下一場的截止時間，以及停掉之後的手動查詢狀態 */
+  const deadline = useRef<number | null>(null);
+  const [watchExpired, setWatchExpired] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkedEmpty, setCheckedEmpty] = useState(false);
 
   const live = state.status === "playing" || state.status === "pending_confirm";
   const { s1: sA, s2: sB } = scoreOf(rounds);
@@ -107,25 +118,51 @@ export function LadderMatchPanel({
     return () => clearInterval(timer);
   }, [live, visible, refresh]);
 
+  const checkNext = useCallback(async () => {
+    if (!myPlayerId) return null;
+    const r = await getNextMatch(myPlayerId, matchId);
+    if (r) {
+      setNext(r);
+      setCountdown(NEXT_COUNTDOWN);
+      beepNextMatch();
+    }
+    return r;
+  }, [myPlayerId, matchId]);
+
   /**
    * 結果成立後繼續盯著「我有沒有新的一場」。
    * 守台的人贏完，挑戰者一發起挑戰就會建立新對戰——不盯的話這頁會停在
-   * 結果畫面，下一個挑戰者已經在等了卻沒人知道。找到就停止輪詢。
+   * 結果畫面，下一個挑戰者已經在等了卻沒人知道。
+   * 找到就停；超過 NEXT_WATCH_MS 沒人來也停，改成手動查。
    */
   useEffect(() => {
-    if (state.status !== "confirmed" || !myPlayerId || !visible || next) return;
-    const check = async () => {
-      const r = await getNextMatch(myPlayerId, matchId);
-      if (r) {
-        setNext(r);
-        setCountdown(NEXT_COUNTDOWN);
-        beepNextMatch();
+    if (state.status !== "confirmed" || !myPlayerId || next || watchExpired) {
+      return;
+    }
+    if (deadline.current === null) deadline.current = Date.now() + NEXT_WATCH_MS;
+    if (!visible) return; // 背景不查，但時鐘照走
+    if (Date.now() >= deadline.current) {
+      setWatchExpired(true);
+      return;
+    }
+    checkNext();
+    const timer = setInterval(() => {
+      if (deadline.current !== null && Date.now() >= deadline.current) {
+        setWatchExpired(true); // effect 會因此重跑並清掉這個 interval
+        return;
       }
-    };
-    check();
-    const timer = setInterval(check, NEXT_POLL_MS);
+      checkNext();
+    }, NEXT_POLL_MS);
     return () => clearInterval(timer);
-  }, [state.status, myPlayerId, visible, next, matchId]);
+  }, [state.status, myPlayerId, visible, next, watchExpired, checkNext]);
+
+  /** 停止自動偵測後的手動查詢（查一次就好，沒有就繼續停著） */
+  const manualCheck = async () => {
+    setChecking(true);
+    const r = await checkNext();
+    setChecking(false);
+    setCheckedEmpty(!r);
+  };
 
   // 看得見的倒數，數完自動進場
   useEffect(() => {
@@ -275,8 +312,11 @@ export function LadderMatchPanel({
     </div>
   );
 
+  // 底部固定欄（轉場橫幅／手動查詢二選一）會蓋住內容，要留出空間
+  const hasBottomBar = !!next || watchExpired;
+
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${hasBottomBar ? "pb-40" : ""}`}>
       {/* 比分顯示 */}
       <div className="flex items-stretch gap-2">
         <Side
@@ -558,6 +598,26 @@ export function LadderMatchPanel({
         <p className="text-center text-xs text-slate-600">
           你以「{me.avatar} {me.nickname}」出賽
         </p>
+      )}
+
+      {/* 自動偵測停掉後，這顆就是進下一場的唯一入口——要大、要好按 */}
+      {!next && watchExpired && (
+        <div className="fixed inset-x-0 bottom-0 z-[80] border-t-2 border-arena-line bg-arena-deep/95 p-3 pb-5 backdrop-blur">
+          <div className="mx-auto max-w-md">
+            <button
+              onClick={manualCheck}
+              disabled={checking}
+              className="btn-gold w-full py-4 text-base disabled:opacity-50"
+            >
+              {checking ? "查詢中⋯" : "🔄 查看有沒有下一場"}
+            </button>
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              {checkedEmpty
+                ? "還沒有人挑戰你——有人上場後再按一次。"
+                : "已停止自動偵測（省電）；有人挑戰你時按這裡就會進場。"}
+            </p>
+          </div>
+        </div>
       )}
 
       {/* 下一場來了：積分變化一起放進來，不必為了看它而按「稍等」 */}
