@@ -104,6 +104,16 @@ export function beepReshoot() {
   vibrate([60, 60, 60]);
 }
 
+/**
+ * 下一場來了：兩聲上揚的招呼音。
+ * 現場很吵、手機常架在戰鬥盤旁邊沒人盯著，純視覺會漏掉。
+ */
+export function beepNextMatch() {
+  tone(784, 0, 0.16, "triangle", 0.11);
+  tone(1047, 0.18, 0.26, "triangle", 0.11);
+  vibrate([100, 70, 100, 70, 180]);
+}
+
 /** 中文語音播報（可關閉） */
 export function speak(text: string) {
   try {
