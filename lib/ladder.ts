@@ -9,8 +9,14 @@ import { SupabaseClient } from "@supabase/supabase-js";
 
 /** 進場效期（ladder_enter_gym 寫死 30 分鐘，此處僅供畫面提示） */
 export const PRESENCE_MINUTES = 30;
-/** 敗方未操作自動成立的時間（ladder_maintenance 負責，此處僅供畫面提示） */
-export const AUTO_CONFIRM_MINUTES = 10;
+/**
+ * 敗方未操作自動成立的時間（ladder_maintenance 負責，此處僅供畫面提示）。
+ *
+ * 現場是 2–3 個戰鬥台、贏的守台繼續打，節奏很快——等太久會卡住守台的人
+ * 接受下一個挑戰，所以設 1 分鐘。另外 ladder_challenge 有隱性確認：
+ * 發起或接受新挑戰時，雙方 pending_confirm 的場會直接成立。
+ */
+export const AUTO_CONFIRM_MINUTES = 1;
 /** 排行榜每組只取前 20 */
 export const LEADERBOARD_LIMIT = 20;
 

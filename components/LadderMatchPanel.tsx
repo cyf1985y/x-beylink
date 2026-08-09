@@ -405,7 +405,8 @@ export function LadderMatchPanel({
             </button>
           </div>
           <p className="mt-3 text-[11px] text-slate-500">
-            {AUTO_CONFIRM_MINUTES} 分鐘內未操作，這個結果會自動成立。
+            {AUTO_CONFIRM_MINUTES} 分鐘內未操作，這個結果會自動成立；
+            對手接受下一場挑戰時，這場也會直接成立。
             只有敗方可以確認結果。
           </p>
         </section>
