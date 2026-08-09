@@ -34,6 +34,12 @@ import {
   fanfare,
   speak,
 } from "@/lib/sound";
+import {
+  ScoreFlash,
+  WinFlash,
+  VoiceToggle,
+  type FlashState,
+} from "@/components/ScoreFlash";
 import { RoundCountdown } from "@/components/RoundCountdown";
 import { ReshootButton } from "@/components/ReshootButton";
 import { RoundTimeline } from "@/components/RoundTimeline";
@@ -51,9 +57,6 @@ const NEXT_COUNTDOWN = 5;
  * 不設上限就會前景輪詢到永遠。停掉後改由使用者手動查。
  */
 const NEXT_WATCH_MS = 3 * 60_000;
-/** 得分覆蓋畫面停留時間 */
-const FLASH_MS = 1_500;
-
 type Finish = (typeof FINISH_TYPES)[number];
 
 /**
@@ -96,9 +99,7 @@ export function LadderMatchPanel({
   const [checking, setChecking] = useState(false);
   const [checkedEmpty, setCheckedEmpty] = useState(false);
   /** 得分後的全螢幕覆蓋；達成判勝時改跳勝利畫面，不會兩層連續出現 */
-  const [flash, setFlash] = useState<{ side: 1 | 2; finish: Finish } | null>(
-    null
-  );
+  const [flash, setFlash] = useState<FlashState>(null);
   const [showWin, setShowWin] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
 
@@ -225,13 +226,6 @@ export function LadderMatchPanel({
    */
   const decided = isDecided(sA, sB);
 
-  // 得分覆蓋 1.5 秒後自動關閉（誤按時可以點畫面提前關掉去按 −1）
-  useEffect(() => {
-    if (!flash) return;
-    const t = setTimeout(() => setFlash(null), FLASH_MS);
-    return () => clearTimeout(t);
-  }, [flash]);
-
   /**
    * 記一次得分。這一筆若讓比分達成判勝，直接跳勝利畫面（號角＋語音），
    * 不再跳一般的得分覆蓋——避免兩層全螢幕連續出現。
@@ -259,7 +253,7 @@ export function LadderMatchPanel({
       if (voiceOn) speak(`${wSide === 1 ? "藍方" : "紅方"} ${w.nickname} 獲勝`);
       return;
     }
-    setFlash({ side, finish: f });
+    setFlash({ side, finish: f.type });
   };
   const winnerSide: 1 | 2 | null = decided ? (sA > sB ? 1 : 2) : null;
   const winner = winnerSide === 1 ? playerA : playerB;
@@ -385,13 +379,11 @@ export function LadderMatchPanel({
             <p className="min-w-0 flex-1 text-xs text-slate-400">
               先取 {WIN_POINTS} 分獲勝｜任一方計分後由該裝置回報
             </p>
-            <button
-              type="button"
-              onClick={() => setVoiceOn((v) => !v)}
+            <VoiceToggle
+              on={voiceOn}
+              onToggle={() => setVoiceOn((v) => !v)}
               className="shrink-0 rounded-lg border border-arena-line px-2 py-0.5 text-[11px] text-slate-500 transition hover:text-slate-300"
-            >
-              {voiceOn ? "🔊 語音開" : "🔇 語音關"}
-            </button>
+            />
           </div>
 
           {/* 天梯沒有裁判，這顆按鈕就是裁判 */}
@@ -660,52 +652,25 @@ export function LadderMatchPanel({
         套在 fixed inset-0 上會把整個覆蓋層往下推 16px（頂端露出 header）。
       */}
 
-      {/* 得分：全螢幕 1.5 秒，用該側顏色鋪滿，幾公尺外也看得出誰得分、得幾分 */}
       {flash && (
-        <button
-          type="button"
-          onClick={() => setFlash(null)}
-          aria-label="關閉得分畫面"
-          className={`fixed inset-0 z-[90] flex flex-col items-center justify-center ${
-            flash.side === 1
-              ? "bg-cyanx text-arena-deep"
-              : "bg-red-500 text-white"
-          }`}
-        >
-          <span className="font-num text-[26vh] font-black leading-none">
-            ＋{flash.finish.points}
-          </span>
-          <span className="mt-2 text-[7vh] font-black leading-none">
-            {flash.finish.icon} {flash.finish.label}
-          </span>
-          <span className="mt-4 max-w-full truncate px-4 text-[4vh] font-bold leading-none opacity-80">
-            {flash.side === 1 ? playerA.avatar : playerB.avatar}{" "}
-            {flash.side === 1 ? playerA.nickname : playerB.nickname}
-          </span>
-        </button>
+        <ScoreFlash
+          side={flash.side}
+          finish={flash.finish}
+          nickname={flash.side === 1 ? playerA.nickname : playerB.nickname}
+          avatar={flash.side === 1 ? playerA.avatar : playerB.avatar}
+          onClose={() => setFlash(null)}
+        />
       )}
 
-      {/* 勝利：號角＋語音，比照賽事版 */}
       {showWin && winnerSide && (
-        <button
-          type="button"
-          onClick={() => setShowWin(false)}
-          aria-label="關閉勝利畫面"
-          className={`fixed inset-0 z-[95] flex flex-col items-center justify-center backdrop-blur-sm ${
-            winnerSide === 1 ? "bg-cyanx/20" : "bg-red-500/20"
-          }`}
-        >
-          <span className="animate-floaty text-[22vh] leading-none">
-            {winner.avatar}
-          </span>
-          <p className="mt-3 px-4 text-center text-[6vh] font-black leading-tight text-gold text-glow">
-            🎉 {winnerSide === 1 ? "藍方" : "紅方"} {winner.nickname} 獲勝！
-          </p>
-          <p className="font-num text-[5vh] font-bold text-slate-100">
-            {sA} : {sB}
-          </p>
-          <p className="mt-4 text-[2vh] text-slate-400">點畫面任意處關閉</p>
-        </button>
+        <WinFlash
+          side={winnerSide}
+          nickname={winner.nickname}
+          avatar={winner.avatar}
+          score1={sA}
+          score2={sB}
+          onClose={() => setShowWin(false)}
+        />
       )}
 
       {/* 自動偵測停掉後，這顆就是進下一場的唯一入口——要大、要好按 */}

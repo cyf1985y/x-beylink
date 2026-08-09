@@ -12,12 +12,19 @@ import {
 } from "@/app/referee/scoring";
 import {
   FINISH_TYPES,
+  FINISH_POINTS,
   WIN_POINTS,
   type FinishType,
   type ReshootReason,
 } from "@/lib/bracket";
 import type { DbMatchPoint } from "@/lib/rounds";
 import { beepScore, beepUndo, beepReshoot, fanfare, speak } from "@/lib/sound";
+import {
+  ScoreFlash,
+  WinFlash,
+  VoiceToggle,
+  type FlashState,
+} from "@/components/ScoreFlash";
 import { RoundCountdown } from "@/components/RoundCountdown";
 import { ReshootButton } from "@/components/ReshootButton";
 import { RoundTimeline } from "@/components/RoundTimeline";
@@ -139,6 +146,10 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
   const [rounds, setRounds] = useState<DbMatchPoint[]>(match.rounds);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /** 得分／勝利全螢幕與語音開關：三處計分板共用同一套行為 */
+  const [flash, setFlash] = useState<FlashState>(null);
+  const [win, setWin] = useState<{ side: 1 | 2 } | null>(null);
+  const [voiceOn, setVoiceOn] = useState(true);
 
   const finished = !!winnerId;
   const ready = !!match.player1 && !!match.player2;
@@ -158,8 +169,44 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
       const prev = winnerId;
       setWinnerId(r.winnerId ?? null);
       if (r.winnerId && prev !== r.winnerId) {
+        const wSide = r.winnerSide ?? 1;
+        setWin({ side: wSide });
         fanfare();
-        speak(`${r.winnerSide === 1 ? "藍方" : "紅方"} ${r.winnerName ?? ""} 獲勝`);
+        if (voiceOn) {
+          speak(`${wSide === 1 ? "藍方" : "紅方"} ${r.winnerName ?? ""} 獲勝`);
+        }
+      }
+      router.refresh();
+    });
+  };
+
+  /**
+   * 記一次得分。這一筆若分出勝負，直接跳勝利畫面（號角＋語音），
+   * 不再跳一般的得分覆蓋——避免兩層全螢幕連續出現。
+   */
+  const doFinish = (side: 1 | 2, f: FinishType) => {
+    setError(null);
+    beepScore(side, FINISH_POINTS[f]);
+    startTransition(async () => {
+      const r = await addFinish(match.eventId, match.id, side, f);
+      if (r.rounds) setRounds(r.rounds);
+      if (!r.ok) {
+        setError(r.error ?? "操作失敗");
+        return;
+      }
+      if (typeof r.score1 === "number") setS1(r.score1);
+      if (typeof r.score2 === "number") setS2(r.score2);
+      const prev = winnerId;
+      setWinnerId(r.winnerId ?? null);
+      if (r.winnerId && prev !== r.winnerId) {
+        const wSide = r.winnerSide ?? 1;
+        setWin({ side: wSide });
+        fanfare();
+        if (voiceOn) {
+          speak(`${wSide === 1 ? "藍方" : "紅方"} ${r.winnerName ?? ""} 獲勝`);
+        }
+      } else if (!r.winnerId) {
+        setFlash({ side, finish: f });
       }
       router.refresh();
     });
@@ -174,9 +221,12 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
   return (
     <>
       <div className="card-x p-4">
-        <p className="text-center text-sm font-black tracking-wider text-slate-300">
-          {match.roundLabel}・第 {match.tableNo} 決鬥台
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 flex-1 text-center text-sm font-black tracking-wider text-slate-300">
+            {match.roundLabel}・第 {match.tableNo} 決鬥台
+          </p>
+          <VoiceToggle on={voiceOn} onToggle={() => setVoiceOn((v) => !v)} />
+        </div>
 
         <div className="mt-3 flex items-stretch gap-2">
           <ScoreCard
@@ -236,12 +286,7 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
               avatar={match.player1?.avatar ?? "❔"}
               accent="cyan"
               disabled={pending || !ready}
-              onFinish={(f) =>
-                handle(
-                  () => addFinish(match.eventId, match.id, 1, f),
-                  () => beepScore(1, FINISH_TYPES.find((x) => x.type === f)!.points)
-                )
-              }
+              onFinish={(f) => doFinish(1, f)}
               onPenalty={() =>
                 handle(
                   () => addPenalty(match.eventId, match.id, 1),
@@ -254,12 +299,7 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
               avatar={match.player2?.avatar ?? "❔"}
               accent="violet"
               disabled={pending || !ready}
-              onFinish={(f) =>
-                handle(
-                  () => addFinish(match.eventId, match.id, 2, f),
-                  () => beepScore(2, FINISH_TYPES.find((x) => x.type === f)!.points)
-                )
-              }
+              onFinish={(f) => doFinish(2, f)}
               onPenalty={() =>
                 handle(
                   () => addPenalty(match.eventId, match.id, 2),
@@ -316,6 +356,36 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
         player1={match.player1}
         player2={match.player2}
       />
+
+      {flash && (
+        <ScoreFlash
+          side={flash.side}
+          finish={flash.finish}
+          nickname={
+            (flash.side === 1 ? match.player1 : match.player2)?.nickname ??
+            "選手"
+          }
+          avatar={
+            (flash.side === 1 ? match.player1 : match.player2)?.avatar ?? "🌀"
+          }
+          onClose={() => setFlash(null)}
+        />
+      )}
+
+      {win && (
+        <WinFlash
+          side={win.side}
+          nickname={
+            (win.side === 1 ? match.player1 : match.player2)?.nickname ?? "選手"
+          }
+          avatar={
+            (win.side === 1 ? match.player1 : match.player2)?.avatar ?? "🌀"
+          }
+          score1={s1}
+          score2={s2}
+          onClose={() => setWin(null)}
+        />
+      )}
     </>
   );
 }
