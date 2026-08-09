@@ -32,6 +32,7 @@ import {
   beepReshoot,
   beepNextMatch,
   fanfare,
+  speak,
 } from "@/lib/sound";
 import { RoundCountdown } from "@/components/RoundCountdown";
 import { ReshootButton } from "@/components/ReshootButton";
@@ -50,6 +51,10 @@ const NEXT_COUNTDOWN = 5;
  * 不設上限就會前景輪詢到永遠。停掉後改由使用者手動查。
  */
 const NEXT_WATCH_MS = 3 * 60_000;
+/** 得分覆蓋畫面停留時間 */
+const FLASH_MS = 1_500;
+
+type Finish = (typeof FINISH_TYPES)[number];
 
 /**
  * 天梯對戰面板：計分 → 回報 → 敗方確認／異議。
@@ -90,6 +95,12 @@ export function LadderMatchPanel({
   const [watchExpired, setWatchExpired] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkedEmpty, setCheckedEmpty] = useState(false);
+  /** 得分後的全螢幕覆蓋；達成判勝時改跳勝利畫面，不會兩層連續出現 */
+  const [flash, setFlash] = useState<{ side: 1 | 2; finish: Finish } | null>(
+    null
+  );
+  const [showWin, setShowWin] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
 
   const live = state.status === "playing" || state.status === "pending_confirm";
   const { s1: sA, s2: sB } = scoreOf(rounds);
@@ -213,6 +224,43 @@ export function LadderMatchPanel({
    * 和 addLadderFinish 的伺服器端守門是同一份邏輯。
    */
   const decided = isDecided(sA, sB);
+
+  // 得分覆蓋 1.5 秒後自動關閉（誤按時可以點畫面提前關掉去按 −1）
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), FLASH_MS);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  /**
+   * 記一次得分。這一筆若讓比分達成判勝，直接跳勝利畫面（號角＋語音），
+   * 不再跳一般的得分覆蓋——避免兩層全螢幕連續出現。
+   */
+  const scoreFinish = async (side: 1 | 2, f: Finish) => {
+    if (!myPlayerId) return;
+    setError(null);
+    beepScore(side, f.points);
+    setBusy(true);
+    const r = await addLadderFinish(matchId, myPlayerId, side, f.type);
+    setBusy(false);
+    if (r.rounds) setRounds(r.rounds);
+    if (!r.ok) {
+      setError(r.error ?? "計分失敗");
+      return;
+    }
+
+    const a = r.scoreA ?? 0;
+    const bb = r.scoreB ?? 0;
+    if (isDecided(a, bb)) {
+      const wSide = a > bb ? 1 : 2;
+      const w = wSide === 1 ? playerA : playerB;
+      setShowWin(true);
+      fanfare();
+      if (voiceOn) speak(`${wSide === 1 ? "藍方" : "紅方"} ${w.nickname} 獲勝`);
+      return;
+    }
+    setFlash({ side, finish: f });
+  };
   const winnerSide: 1 | 2 | null = decided ? (sA > sB ? 1 : 2) : null;
   const winner = winnerSide === 1 ? playerA : playerB;
 
@@ -288,12 +336,7 @@ export function LadderMatchPanel({
           key={f.type}
           type="button"
           disabled={busy || decided}
-          onClick={() =>
-            runRound(
-              (pid) => addLadderFinish(matchId, pid, side, f.type),
-              () => beepScore(side, f.points)
-            )
-          }
+          onClick={() => scoreFinish(side, f)}
           className={`rounded-xl border-2 py-2.5 transition active:scale-95 disabled:opacity-30 ${
             side === 1
               ? "border-cyanx/50 bg-cyanx/10"
@@ -316,7 +359,8 @@ export function LadderMatchPanel({
   const hasBottomBar = !!next || watchExpired;
 
   return (
-    <div className={`space-y-4 ${hasBottomBar ? "pb-40" : ""}`}>
+    <>
+      <div className={`space-y-4 ${hasBottomBar ? "pb-40" : ""}`}>
       {/* 比分顯示 */}
       <div className="flex items-stretch gap-2">
         <Side
@@ -337,9 +381,18 @@ export function LadderMatchPanel({
       {/* 進行中：計分 */}
       {state.status === "playing" && isParticipant && (
         <section className="card-x p-4">
-          <p className="text-center text-xs text-slate-400">
-            先取 {WIN_POINTS} 分獲勝｜任一方計分後由該裝置回報
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 flex-1 text-xs text-slate-400">
+              先取 {WIN_POINTS} 分獲勝｜任一方計分後由該裝置回報
+            </p>
+            <button
+              type="button"
+              onClick={() => setVoiceOn((v) => !v)}
+              className="shrink-0 rounded-lg border border-arena-line px-2 py-0.5 text-[11px] text-slate-500 transition hover:text-slate-300"
+            >
+              {voiceOn ? "🔊 語音開" : "🔇 語音關"}
+            </button>
+          </div>
 
           {/* 天梯沒有裁判，這顆按鈕就是裁判 */}
           <div className="mt-3">
@@ -599,6 +652,61 @@ export function LadderMatchPanel({
           你以「{me.avatar} {me.nickname}」出賽
         </p>
       )}
+      </div>
+
+      {/*
+        以下的固定覆蓋層刻意放在 space-y-4 容器「外面」：
+        Tailwind 的 space-y-* 會給容器內每個後續子元素加 margin-top，
+        套在 fixed inset-0 上會把整個覆蓋層往下推 16px（頂端露出 header）。
+      */}
+
+      {/* 得分：全螢幕 1.5 秒，用該側顏色鋪滿，幾公尺外也看得出誰得分、得幾分 */}
+      {flash && (
+        <button
+          type="button"
+          onClick={() => setFlash(null)}
+          aria-label="關閉得分畫面"
+          className={`fixed inset-0 z-[90] flex flex-col items-center justify-center ${
+            flash.side === 1
+              ? "bg-cyanx text-arena-deep"
+              : "bg-red-500 text-white"
+          }`}
+        >
+          <span className="font-num text-[26vh] font-black leading-none">
+            ＋{flash.finish.points}
+          </span>
+          <span className="mt-2 text-[7vh] font-black leading-none">
+            {flash.finish.icon} {flash.finish.label}
+          </span>
+          <span className="mt-4 max-w-full truncate px-4 text-[4vh] font-bold leading-none opacity-80">
+            {flash.side === 1 ? playerA.avatar : playerB.avatar}{" "}
+            {flash.side === 1 ? playerA.nickname : playerB.nickname}
+          </span>
+        </button>
+      )}
+
+      {/* 勝利：號角＋語音，比照賽事版 */}
+      {showWin && winnerSide && (
+        <button
+          type="button"
+          onClick={() => setShowWin(false)}
+          aria-label="關閉勝利畫面"
+          className={`fixed inset-0 z-[95] flex flex-col items-center justify-center backdrop-blur-sm ${
+            winnerSide === 1 ? "bg-cyanx/20" : "bg-red-500/20"
+          }`}
+        >
+          <span className="animate-floaty text-[22vh] leading-none">
+            {winner.avatar}
+          </span>
+          <p className="mt-3 px-4 text-center text-[6vh] font-black leading-tight text-gold text-glow">
+            🎉 {winnerSide === 1 ? "藍方" : "紅方"} {winner.nickname} 獲勝！
+          </p>
+          <p className="font-num text-[5vh] font-bold text-slate-100">
+            {sA} : {sB}
+          </p>
+          <p className="mt-4 text-[2vh] text-slate-400">點畫面任意處關閉</p>
+        </button>
+      )}
 
       {/* 自動偵測停掉後，這顆就是進下一場的唯一入口——要大、要好按 */}
       {!next && watchExpired && (
@@ -677,6 +785,6 @@ export function LadderMatchPanel({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
