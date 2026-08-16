@@ -116,14 +116,16 @@ export function beepGo() {
 /* ------------------------------- 倒數英文語音 ------------------------------- */
 
 /**
- * 四拍倒數語音檔：一個檔案連續唸完「Three, Two, One, GO!」，全長約 3.2 秒，
- * 四拍分別落在 0 / 800 / 1600 / 2400ms。
+ * 四拍倒數語音檔：一個檔案連續唸完「Three, Two, One, GO!」。
  *
  * 刻意用「單一檔案」而不是四個檔案：四個檔各自載入解碼的時間不同，拍子會歪。
  * 也刻意不走 <audio>——iPhone 的實體靜音撥桿會讓 <audio> 完全沒聲音，
  * 必須走 Web Audio 並搭配 enableAudioSession()。
+ *
+ * 目前放的是手機實錄的 m4a（AAC）；decodeAudioData 吃得下 mp3／m4a／wav／ogg，
+ * 換檔案時改這個常數即可。四拍在檔案裡的實際位置見 RoundCountdown 的 BEAT_OFFSETS。
  */
-export const COUNTDOWN_SRC = "/countdown-321go.mp3";
+export const COUNTDOWN_SRC = "/countdown-321go.m4a";
 
 let countdownBuffer: AudioBuffer | null = null;
 let countdownLoading: Promise<AudioBuffer | null> | null = null;
@@ -157,17 +159,20 @@ export function loadCountdown(): Promise<AudioBuffer | null> {
 /**
  * 播放倒數語音。
  *
+ * offsetSeconds：從音檔的第幾秒開始播——錄音開頭那段靜音用這個跳過，
+ * 這樣畫面的第一拍和聽到「Three」的瞬間才會對齊。
+ *
  * 回傳停止函式（倒數中途取消要把聲音一起停掉）；
  * 回傳 null 代表音檔還沒備妥，呼叫端請改用合成嗶聲頂著。
  */
-export function playCountdown(): (() => void) | null {
+export function playCountdown(offsetSeconds = 0): (() => void) | null {
   const ac = ctx();
   if (!ac || !countdownBuffer) return null;
   try {
     const src = ac.createBufferSource();
     src.buffer = countdownBuffer;
     src.connect(ac.destination);
-    src.start();
+    src.start(0, Math.max(0, offsetSeconds));
     return () => {
       try {
         src.stop();

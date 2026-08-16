@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>倒數音檔校準</title>
+<style>
+  body { background:#0b1026; color:#e6ecff; font-family:system-ui,"Noto Sans TC",sans-serif;
+         margin:0; padding:24px; line-height:1.7; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:#8b96bb; margin:0 0 20px; font-size:14px; }
+  canvas { width:100%; height:220px; background:#04060e; border:1px solid #232b52;
+           border-radius:12px; display:block; cursor:crosshair; }
+  .out { margin-top:16px; background:#141a36; border:1px solid #232b52; border-radius:12px; padding:16px; }
+  code { font-family:ui-monospace,monospace; color:#38e0ff; font-size:15px; }
+  button { background:#38e0ff; color:#04060e; border:0; border-radius:10px; padding:10px 18px;
+           font-weight:800; cursor:pointer; margin-right:8px; }
+  button.ghost { background:transparent; color:#8b96bb; border:1px solid #232b52; }
+  table { border-collapse:collapse; margin-top:10px; font-size:14px; }
+  td,th { padding:4px 14px 4px 0; text-align:left; }
+  .warn { color:#f5c542; }
+</style>
+</head>
+<body>
+<h1>倒數音檔校準</h1>
+<p class="sub">
+  量出 Three／Two／One／GO 四個字各自的起音點，貼回
+  <code>components/RoundCountdown.tsx</code> 的 <code>BEAT_OFFSETS</code>。
+  瀏覽器有 AAC 解碼器，所以這件事在這裡做最準。
+</p>
+
+<div>
+  <button id="play">▶ 播放</button>
+  <button id="reset" class="ghost">重設標記</button>
+  <span id="status" class="sub"></span>
+</div>
+
+<p class="sub" style="margin:14px 0 6px">
+  下圖是實際波形。綠線是自動偵測的四個起音點；<b>不準的話直接在圖上點四下</b>（由左到右）手動指定。
+</p>
+<canvas id="wave" width="1600" height="440"></canvas>
+
+<div class="out">
+  <div id="result"></div>
+</div>
+
+<script>
+const SRC = "/countdown-321go.m4a";
+const LABELS = ["Three", "Two", "One", "GO"];
+let buf = null, onsets = [], manual = [];
+
+const cv = document.getElementById("wave");
+const ctx2d = cv.getContext("2d");
+const statusEl = document.getElementById("status");
+
+/** 取包絡線：每個像素欄位的最大振幅 */
+function envelope(ch, cols) {
+  const per = Math.floor(ch.length / cols), env = new Float32Array(cols);
+  for (let x = 0; x < cols; x++) {
+    let peak = 0;
+    for (let i = x * per, end = i + per; i < end; i++) {
+      const v = Math.abs(ch[i]);
+      if (v > peak) peak = v;
+    }
+    env[x] = peak;
+  }
+  return env;
+}
+
+/**
+ * 自動找四個起音點。
+ * 手機錄音有持續底噪，所以門檻取「噪音底 + 動態範圍的一部分」，
+ * 並要求連續超過門檻一小段才算一個字，避免咳嗽或雜音被當成字。
+ */
+function detectOnsets(ch, rate) {
+  const win = Math.floor(rate * 0.01);           // 10ms 一格
+  const n = Math.floor(ch.length / win);
+  const rms = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (let j = i * win; j < (i + 1) * win; j++) s += ch[j] * ch[j];
+    rms[i] = Math.sqrt(s / win);
+  }
+  const sorted = [...rms].sort((a, b) => a - b);
+  const floor = sorted[Math.floor(n * 0.20)];     // 噪音底
+  const peak  = sorted[Math.floor(n * 0.99)];
+  const thr   = floor + (peak - floor) * 0.18;
+
+  const hold = 4;                                  // 需連續 40ms 才算開始
+  const gap  = 12;                                 // 字與字至少隔 120ms
+  const found = [];
+  let i = 0;
+  while (i < n) {
+    if (rms[i] > thr) {
+      let k = 0;
+      while (i + k < n && rms[i + k] > thr) k++;
+      if (k >= hold) {
+        const t = i * win / rate * 1000;
+        if (!found.length || t - found[found.length - 1] > gap * 10) found.push(t);
+        i += k;
+        continue;
+      }
+    }
+    i++;
+  }
+  return { found, thr, rms, win, rate };
+}
+
+function draw() {
+  const W = cv.width, H = cv.height;
+  ctx2d.clearRect(0, 0, W, H);
+  if (!buf) return;
+  const ch = buf.getChannelData(0);
+  const env = envelope(ch, W);
+
+  // 波形
+  ctx2d.fillStyle = "#1d2a52";
+  for (let x = 0; x < W; x++) {
+    const h = Math.max(1, env[x] * H * 0.92);
+    ctx2d.fillRect(x, (H - h) / 2, 1, h);
+  }
+
+  // 標記
+  const marks = manual.length === 4 ? manual : onsets;
+  marks.forEach((ms, i) => {
+    const x = (ms / 1000) / buf.duration * W;
+    ctx2d.fillStyle = manual.length === 4 ? "#f5c542" : "#4ade80";
+    ctx2d.fillRect(x, 0, 2, H);
+    ctx2d.font = "bold 22px system-ui";
+    ctx2d.fillText(LABELS[i] ?? "?", x + 6, 28);
+  });
+}
+
+function report() {
+  const marks = (manual.length === 4 ? manual : onsets).map(Math.round);
+  const el = document.getElementById("result");
+  if (marks.length !== 4) {
+    el.innerHTML = `<p class="warn">自動偵測到 ${marks.length} 個聲音區段，不是 4 個。
+      請直接在波形上由左到右點四下，手動標出 Three／Two／One／GO 的起音點。</p>`;
+    return;
+  }
+  // 以第一個字為 0 點——程式是從播放開始算的，所以要一起把前面的靜音扣掉
+  const base = marks[0];
+  const rel = marks.map((m) => m - base);
+  const gaps = rel.slice(1).map((m, i) => m - rel[i]);
+
+  el.innerHTML = `
+    <table>
+      <tr><th>字</th><th>檔案內絕對時間</th><th>相對第一個字</th></tr>
+      ${marks.map((m, i) =>
+        `<tr><td>${LABELS[i]}</td><td>${m} ms</td><td>${rel[i]} ms</td></tr>`).join("")}
+    </table>
+    <p style="margin:12px 0 4px">拍距：${gaps.map((g) => g + "ms").join("、")}
+       ${gaps.some((g) => Math.abs(g - 800) > 200)
+         ? '<span class="warn">（和 800ms 差距較大，屬正常人聲節奏）</span>' : ""}</p>
+    <p style="margin:12px 0 4px">音檔開頭有 <b>${base} ms</b> 的靜音，
+       <b>LEAD_SILENCE_MS</b> 請填這個數字。</p>
+    <p style="margin:14px 0 4px">貼進 <code>components/RoundCountdown.tsx</code>：</p>
+    <p><code>const BEAT_OFFSETS = [${rel.join(", ")}];</code></p>
+    <p><code>const LEAD_SILENCE_MS = ${base};</code></p>
+    <p class="sub">總長 ${Math.round(buf.duration * 1000)} ms</p>`;
+}
+
+cv.addEventListener("click", (e) => {
+  if (!buf) return;
+  const r = cv.getBoundingClientRect();
+  const ms = (e.clientX - r.left) / r.width * buf.duration * 1000;
+  if (manual.length >= 4) manual = [];
+  manual.push(ms);
+  manual.sort((a, b) => a - b);
+  draw(); report();
+});
+
+document.getElementById("reset").onclick = () => { manual = []; draw(); report(); };
+
+document.getElementById("play").onclick = async () => {
+  const ac = new AudioContext();
+  const src = ac.createBufferSource();
+  src.buffer = buf; src.connect(ac.destination); src.start();
+};
+
+(async () => {
+  statusEl.textContent = "載入中⋯";
+  try {
+    const ac = new AudioContext();
+    const res = await fetch(SRC);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    buf = await ac.decodeAudioData(await res.arrayBuffer());
+    const d = detectOnsets(buf.getChannelData(0), buf.sampleRate);
+    onsets = d.found;
+    statusEl.textContent =
+      `${Math.round(buf.duration * 1000)} ms・${buf.sampleRate} Hz・偵測到 ${onsets.length} 段聲音`;
+    draw(); report();
+  } catch (err) {
+    statusEl.textContent = "載入失敗：" + err.message;
+  }
+})();
+</script>
+</body>
+</html>

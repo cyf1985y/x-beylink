@@ -1,32 +1,54 @@
 # public／靜態檔
 
-## countdown-321go.mp3（**尚未放入，必須補**）
+## countdown-321go.m4a
 
-計分板「▶ 開始回合」的四拍英文倒數語音。`components/RoundCountdown.tsx` 會抓
-`/countdown-321go.mp3`，用 Web Audio 解碼後播放。
+計分板「▶ 開始回合」的四拍英文倒數語音（Three, Two, One, GO!，**沒有 SHOOT**）。
+`components/RoundCountdown.tsx` 會抓這個檔案，用 Web Audio 解碼後播放。
 
-**這個檔案目前不在 repo 裡**——開發環境沒有任何語音合成或音訊編碼工具
-（espeak／ffmpeg／lame 皆無），無法產生真人英文語音，所以由人工補上。
+目前放的是**手機實錄檔**：5.013 秒、48kHz、AAC，47.9 KB。
 
-### 規格
+`decodeAudioData` 吃得下 mp3／m4a／wav／ogg，換檔案時改 `lib/sound.ts` 的
+`COUNTDOWN_SRC` 常數即可，不必轉檔。
 
-| 項目 | 值 |
-|---|---|
-| 路徑 | `public/countdown-321go.mp3` |
-| 內容 | 連續唸完 `Three, Two, One, GO!`（**沒有 SHOOT**） |
-| 全長 | 約 3.2 秒 |
-| 四拍時間戳 | `Three` 0ms、`Two` 800ms、`One` 1600ms、`GO!` 2400ms |
+### ⚠️ 尚未校準——上線前必做一次
 
-時間戳是硬需求：畫面的四拍是用固定 `setTimeout`（0/800/1600/2400ms）排的，
-不會去對齊音檔內容。錄音時每拍的**起音點**要落在上表的時間，對不準畫面就會歪。
+`RoundCountdown.tsx` 裡的 `BEAT_OFFSETS` 目前填的是交接單的規格值
+`[0, 800, 1600, 2400]`，**不是這個音檔的實際值**。實錄檔是自然人聲，
+四個字不會剛好落在 800ms 的整數倍上，開頭通常也有一段靜音。
 
-### 檔案還沒放進來時的行為
+沒校準的後果：聲音和畫面數字會不同步（功能不會壞，但看起來會怪）。
 
-`loadCountdown()` 取不到檔案就回傳 null，`RoundCountdown` 會自動退回原本的
-Web Audio 合成嗶聲：四拍的節奏、畫面、震動完全一樣，只是沒有人聲。
-所以缺這個檔案不會壞掉，只是聽不到英文語音。
+### 校準方式（約 30 秒）
 
-### 為什麼是單一檔案、而且不用 `<audio>`
+```
+npm run dev
+```
+
+開 <http://localhost:3000/countdown-calibrate.html>，它會：
+
+1. 解碼音檔、畫出實際波形
+2. 自動偵測四個字的起音點（綠線）
+3. 印出可直接貼回程式的兩行常數
+
+自動偵測不準的話，在波形上由左到右點四下手動標，數字會即時更新。
+把印出來的兩行貼進 `components/RoundCountdown.tsx`：
+
+```ts
+const BEAT_OFFSETS = [0, ..., ..., ...];  // 四拍相對第一個字的位移
+const LEAD_SILENCE_MS = ...;              // 開頭靜音，播放時直接跳過
+```
+
+**校準必須在真的瀏覽器上做**——AAC 解碼器只有瀏覽器有，開發容器裡沒有
+（ffmpeg／lame／sox 都沒裝，Playwright 附的 Chromium 是開源版、不含專利編解碼器）。
+
+`countdown-calibrate.html` 是開發用工具，正式環境用不到，可以視情況刪掉或擋掉。
+
+### 音檔壞掉或不見時的行為
+
+`loadCountdown()` 抓不到或解不開就回傳 null，`RoundCountdown` 自動退回原本的
+Web Audio 合成嗶聲：四拍節奏、畫面、震動完全一樣，只是沒有人聲。所以缺檔不會壞。
+
+### 設計取捨
 
 - **單一檔案**：四個獨立音檔各自的載入與解碼時間不同，拍子會歪。
 - **不用 `<audio>`**：iPhone 的實體靜音撥桿一撥，`<audio>` 完全沒聲音，

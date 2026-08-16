@@ -11,8 +11,20 @@ import {
   vibrate,
 } from "@/lib/sound";
 
-/** 每一拍的間隔；語音檔的四拍就是照這個時間戳錄的 */
-const BEAT_MS = 800;
+/**
+ * 四拍在語音檔中的起音點（ms，相對於第一個字）。
+ *
+ * ⚠️ 尚未用實錄音檔校準——目前填的是交接單的規格值。
+ * 校準方式：`npm run dev` 後開 http://localhost:3000/countdown-calibrate.html，
+ * 它會解碼音檔、畫出波形、自動量出四個字的位置，直接把數字貼回這裡。
+ * （校準必須在真的瀏覽器上做：AAC 解碼器只有瀏覽器有。）
+ */
+const BEAT_OFFSETS = [0, 800, 1600, 2400];
+/**
+ * 音檔開頭到第一個字之間的靜音（ms）。
+ * 播放時直接從這裡起播，畫面第一拍才會和聽到「Three」的瞬間對齊。
+ */
+const LEAD_SILENCE_MS = 0;
 /** GO 之後停留多久才回到計分畫面 */
 const TAIL_MS = 400;
 /** 四拍：Three → Two → One → GO（沒有 SHOOT） */
@@ -23,9 +35,9 @@ const LAST = BEATS.length - 1;
  * 「Three、Two、One、GO」四拍全螢幕倒數。
  *
  * 天梯沒有裁判、家長裁判也不好意思喊——這顆按鈕就是裁判。
- * 聲音走 public/countdown-321go.mp3 單一音檔（Web Audio 播放，蓋得過 iPhone 靜音撥桿）；
- * 音檔還沒備妥時退回合成嗶聲，拍子與畫面完全一樣，只是沒有人聲。
- * 畫面用固定時間戳 0 / 800 / 1600 / 2400ms 對齊音檔，不逐拍重算。
+ * 聲音走 public/countdown-321go.m4a 單一音檔（Web Audio 播放，蓋得過 iPhone 靜音撥桿）；
+ * 音檔載不到時退回合成嗶聲，拍子與畫面完全一樣，只是沒有人聲。
+ * 畫面用 BEAT_OFFSETS 的時間戳對齊音檔，不逐拍重算。
  * 倒數中點畫面任意處即可取消（誤觸不用等它跑完）。
  */
 export function RoundCountdown({
@@ -67,8 +79,8 @@ export function RoundCountdown({
     enableAudioSession();
     unlockAudio();
 
-    // 有語音就播語音，沒有就每拍補一顆合成音
-    stopAudio.current = playCountdown();
+    // 有語音就播語音（跳過開頭靜音），沒有就每拍補一顆合成音
+    stopAudio.current = playCountdown(LEAD_SILENCE_MS / 1000);
     const useBeeps = !stopAudio.current;
 
     const mark = (i: number) => {
@@ -79,13 +91,12 @@ export function RoundCountdown({
 
     mark(0);
     for (let i = 1; i <= LAST; i++) {
-      timers.current.push(setTimeout(() => mark(i), i * BEAT_MS));
+      timers.current.push(setTimeout(() => mark(i), BEAT_OFFSETS[i]));
     }
+    // 收畫面，但不停聲音——「GO！」這個字通常比 TAIL_MS 長，硬停會把它切掉。
+    // 真的要停（取消、離開畫面、再按一次）都會走 clearAll。
     timers.current.push(
-      setTimeout(() => {
-        setStep(null);
-        stopAudio.current = null;
-      }, LAST * BEAT_MS + TAIL_MS)
+      setTimeout(() => setStep(null), BEAT_OFFSETS[LAST] + TAIL_MS)
     );
   };
 
