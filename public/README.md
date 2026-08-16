@@ -10,15 +10,28 @@
 `decodeAudioData` 吃得下 mp3／m4a／wav／ogg，換檔案時改 `lib/sound.ts` 的
 `COUNTDOWN_SRC` 常數即可，不必轉檔。
 
-### ⚠️ 尚未校準——上線前必做一次
+### 已量測的內容（ffmpeg 解碼後取 5ms RMS 包絡線）
 
-`RoundCountdown.tsx` 裡的 `BEAT_OFFSETS` 目前填的是交接單的規格值
-`[0, 800, 1600, 2400]`，**不是這個音檔的實際值**。實錄檔是自然人聲，
-四個字不會剛好落在 800ms 的整數倍上，開頭通常也有一段靜音。
+| 段 | 起音 | 結束 | 長度 | 對應 |
+|---|---|---|---|---|
+| 1 | 140 ms | 455 ms | 315 ms | Three |
+| 2 | 985 ms | 1345 ms | 360 ms | Two |
+| 3 | 1985 ms | 2285 ms | 300 ms | One |
+| 4 | 2840 ms | 2985 ms | 145 ms | GO |
+| 5 | 3625 ms | 3750 ms | 125 ms | **多出來的第 5 段** |
 
-沒校準的後果：聲音和畫面數字會不同步（功能不會壞，但看起來會怪）。
+實際拍距是 845／1000／855 ms，不是規格的 800 均等——自然人聲本來就這樣，
+所以程式改成吃 `BEAT_OFFSETS` 而不是寫死一拍 800ms。
 
-### 校準方式（約 30 秒）
+**第 5 段**（3625ms）超出交接單「四拍、SHOOT 拿掉」的要求。推測是照舊版
+習慣唸成「Three, Two, One, Go, Shoot」。處理方式是**播放時切掉**，不必重錄：
+`PLAY_MS = 3060`（相對第一個字），GO 播完、第 5 段播不到。
+
+⚠️ 段 1–5 對應到哪些字**尚未經人耳確認**——開發容器聽不到聲音，
+這是從「5 段、間隔約 800ms、最後兩段特別短」推出來的。若實際不同，
+改 `RoundCountdown.tsx` 的 `BEAT_OFFSETS`／`LEAD_SILENCE_MS`／`PLAY_MS` 即可。
+
+### 換音檔時的校準方式（約 30 秒）
 
 ```
 npm run dev
@@ -38,8 +51,14 @@ const BEAT_OFFSETS = [0, ..., ..., ...];  // 四拍相對第一個字的位移
 const LEAD_SILENCE_MS = ...;              // 開頭靜音，播放時直接跳過
 ```
 
-**校準必須在真的瀏覽器上做**——AAC 解碼器只有瀏覽器有，開發容器裡沒有
-（ffmpeg／lame／sox 都沒裝，Playwright 附的 Chromium 是開源版、不含專利編解碼器）。
+開發容器裡沒有預裝任何 AAC 解碼器，但 `pip install imageio-ffmpeg` 會帶一份
+完整的 static ffmpeg（含 AAC），也可以在命令列量：
+
+```bash
+pip install imageio-ffmpeg
+python3 -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"
+# 解成 wav 後自己取 RMS 包絡線抓起音點
+```
 
 `countdown-calibrate.html` 是開發用工具，正式環境用不到，可以視情況刪掉或擋掉。
 

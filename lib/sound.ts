@@ -161,18 +161,26 @@ export function loadCountdown(): Promise<AudioBuffer | null> {
  *
  * offsetSeconds：從音檔的第幾秒開始播——錄音開頭那段靜音用這個跳過，
  * 這樣畫面的第一拍和聽到「Three」的瞬間才會對齊。
+ * durationSeconds：只播這麼長。錄音尾巴多唸的字用這個切掉，不必重錄。
  *
  * 回傳停止函式（倒數中途取消要把聲音一起停掉）；
  * 回傳 null 代表音檔還沒備妥，呼叫端請改用合成嗶聲頂著。
  */
-export function playCountdown(offsetSeconds = 0): (() => void) | null {
+export function playCountdown(
+  offsetSeconds = 0,
+  durationSeconds?: number
+): (() => void) | null {
   const ac = ctx();
   if (!ac || !countdownBuffer) return null;
   try {
     const src = ac.createBufferSource();
     src.buffer = countdownBuffer;
     src.connect(ac.destination);
-    src.start(0, Math.max(0, offsetSeconds));
+    if (durationSeconds && durationSeconds > 0) {
+      src.start(0, Math.max(0, offsetSeconds), durationSeconds);
+    } else {
+      src.start(0, Math.max(0, offsetSeconds));
+    }
     return () => {
       try {
         src.stop();
