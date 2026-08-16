@@ -52,6 +52,22 @@ export function unlockAudio() {
   if (ac && ac.state === "suspended") ac.resume().catch(() => {});
 }
 
+/**
+ * 宣告音訊用途，讓聲音蓋過 iPhone 的實體靜音撥桿。
+ *
+ * 小孩的手機十之八九是靜音的，而靜音撥桿一撥，<audio> 會完全沒聲音——
+ * 倒數走 Web Audio 就是為了這件事。navigator.audioSession 目前只有 Safari 有，
+ * 其他瀏覽器讀不到這個屬性，直接跳過即可。
+ */
+export function enableAudioSession() {
+  try {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (nav.audioSession) nav.audioSession.type = "playback";
+  } catch {
+    /* ignore */
+  }
+}
+
 export function vibrate(pattern: number | number[]) {
   try {
     navigator.vibrate?.(pattern);
@@ -83,18 +99,85 @@ export function fanfare() {
   vibrate([120, 60, 120, 60, 220]);
 }
 
-/** 倒數的一拍（3、2、1）：短促的中音嗶 */
+/** 倒數的一拍（Three、Two、One）：短促的中音嗶 */
 export function beepCount() {
   tone(880, 0, 0.16, "square", 0.1);
   vibrate(60);
 }
 
-/** GO SHOOT！：上揚三連音 */
-export function beepGoShoot() {
+/** GO！：上揚三連音 */
+export function beepGo() {
   [988, 1319, 1568].forEach((f, i) =>
     tone(f, i * 0.07, 0.3, "triangle", 0.12)
   );
   vibrate([90, 40, 160]);
+}
+
+/* ------------------------------- 倒數英文語音 ------------------------------- */
+
+/**
+ * 四拍倒數語音檔：一個檔案連續唸完「Three, Two, One, GO!」，全長約 3.2 秒，
+ * 四拍分別落在 0 / 800 / 1600 / 2400ms。
+ *
+ * 刻意用「單一檔案」而不是四個檔案：四個檔各自載入解碼的時間不同，拍子會歪。
+ * 也刻意不走 <audio>——iPhone 的實體靜音撥桿會讓 <audio> 完全沒聲音，
+ * 必須走 Web Audio 並搭配 enableAudioSession()。
+ */
+export const COUNTDOWN_SRC = "/countdown-321go.mp3";
+
+let countdownBuffer: AudioBuffer | null = null;
+let countdownLoading: Promise<AudioBuffer | null> | null = null;
+
+/**
+ * 預先載入並解碼倒數語音（畫面掛載時就先跑，按下按鈕才不用等）。
+ * 音檔不存在或解碼失敗都只是回傳 null，呼叫端會退回合成嗶聲。
+ */
+export function loadCountdown(): Promise<AudioBuffer | null> {
+  if (countdownBuffer) return Promise.resolve(countdownBuffer);
+  if (countdownLoading) return countdownLoading;
+
+  const ac = ctx();
+  if (!ac) return Promise.resolve(null);
+
+  countdownLoading = fetch(COUNTDOWN_SRC)
+    .then((r) => {
+      if (!r.ok) throw new Error(`countdown ${r.status}`);
+      return r.arrayBuffer();
+    })
+    .then((buf) => ac.decodeAudioData(buf))
+    .then((decoded) => {
+      countdownBuffer = decoded;
+      return decoded;
+    })
+    .catch(() => null);
+
+  return countdownLoading;
+}
+
+/**
+ * 播放倒數語音。
+ *
+ * 回傳停止函式（倒數中途取消要把聲音一起停掉）；
+ * 回傳 null 代表音檔還沒備妥，呼叫端請改用合成嗶聲頂著。
+ */
+export function playCountdown(): (() => void) | null {
+  const ac = ctx();
+  if (!ac || !countdownBuffer) return null;
+  try {
+    const src = ac.createBufferSource();
+    src.buffer = countdownBuffer;
+    src.connect(ac.destination);
+    src.start();
+    return () => {
+      try {
+        src.stop();
+      } catch {
+        /* 已經播完了 */
+      }
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** 重射：中性的兩聲下行提示（不是得分也不是失誤） */

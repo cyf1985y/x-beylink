@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   challenge,
@@ -9,11 +9,20 @@ import {
   type GymState,
 } from "@/app/ladder/actions";
 import { AUTO_CONFIRM_MINUTES, PRESENCE_MINUTES } from "@/lib/ladder";
+import { beepNextMatch } from "@/lib/sound";
+import { StatusBanner } from "@/components/StatusBanner";
 
 type MyPlayer = { id: string; nickname: string; avatar: string };
 
-/** 在場名單輪詢間隔 */
-const POLL_MS = 10_000;
+/**
+ * 在場名單輪詢間隔。
+ *
+ * 2 秒是為了「被挑戰」這件事：ladder_challenge 沒有對方接受這一步，
+ * 比賽建立的當下對手其實還站在道館頁，輪詢太慢他就會一直站在那裡。
+ */
+const POLL_MS = 2_000;
+/** 偵測到對戰後，沒人操作也會自動進場的秒數 */
+const AUTO_ENTER_SECONDS = 5;
 
 /**
  * 道館現場：進場（一次性定位）→ 看見在場的人 → 發起挑戰。
@@ -35,9 +44,17 @@ export function GymArena({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  /**
+   * 輪詢計數：2 秒一次，但逾時自動成立的補跑每 15 次（約 30 秒）帶一次就好。
+   * 自動成立的門檻是 1 分鐘，每 2 秒掃一次純粹是浪費。
+   */
+  const polls = useRef(0);
+
   const refresh = useCallback(async () => {
     try {
-      setState(await getGymState(gym.id));
+      const withMaintenance = polls.current % 15 === 0;
+      polls.current += 1;
+      setState(await getGymState(gym.id, withMaintenance));
     } catch {
       // 輪詢失敗不打擾使用者，下一輪會再試
     }
@@ -48,6 +65,43 @@ export function GymArena({
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  /**
+   * 「我現在該做什麼」：偵測到自己有一場對戰就把人推進計分板。
+   *
+   * 被挑戰的人完全沒被問過，所以這裡不做「接受／拒絕」——比賽已經成立了，
+   * 全螢幕通知只是告訴他發生什麼事，5 秒沒動作就自動進場。
+   * 做成不按就不算開始，小孩沒看手機時整個現場都會卡住。
+   */
+  const active = state?.activeMatch ?? null;
+  const activeMatchId = active?.matchId ?? null;
+  const [enterIn, setEnterIn] = useState<number | null>(null);
+  const announced = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!activeMatchId) {
+      announced.current = null;
+      setEnterIn(null);
+      return;
+    }
+    if (announced.current === activeMatchId) return;
+    announced.current = activeMatchId;
+    setEnterIn(AUTO_ENTER_SECONDS);
+    beepNextMatch(); // 現場很吵、手機常放在盤邊，純視覺會漏掉
+  }, [activeMatchId]);
+
+  useEffect(() => {
+    if (enterIn === null || !activeMatchId) return;
+    if (enterIn <= 0) {
+      router.push(`/ladder/match/${activeMatchId}`);
+      return;
+    }
+    const t = setTimeout(
+      () => setEnterIn((n) => (n === null ? null : n - 1)),
+      1000
+    );
+    return () => clearTimeout(t);
+  }, [enterIn, activeMatchId, router]);
 
   const myPresence = state?.myPresence.find((p) => p.playerId === playerId);
   const minutesLeft = myPresence
@@ -120,15 +174,13 @@ export function GymArena({
   const others = (state?.roster ?? []).filter((r) => !r.isMine);
 
   return (
-    <div className="space-y-5">
-      {state?.activeMatchId && (
-        <button
-          onClick={() => router.push(`/ladder/match/${state.activeMatchId}`)}
-          className="block w-full rounded-xl border border-cyanx/50 bg-cyanx/10 px-4 py-3 text-sm font-bold text-cyanx"
-        >
-          ⚔️ 你有一場對戰還沒結束——點此回到現場
-        </button>
-      )}
+    <>
+      <div className="space-y-5">
+      <StatusBanner tone={minutesLeft ? "info" : "wait"}>
+        {minutesLeft
+          ? "已進場——點對手右邊的「挑戰」就開打"
+          : "先按「進入道館」，才能挑戰別人、也才會被別人挑戰"}
+      </StatusBanner>
 
       {/* 選手與進場 */}
       <section className="card-x p-5">
@@ -191,7 +243,7 @@ export function GymArena({
       {/* 在場名單 */}
       <section>
         <h2 className="h-x">現在在場</h2>
-        <p className="mt-1 text-xs text-slate-500">每 10 秒自動更新</p>
+        <p className="mt-1 text-xs text-slate-500">每 2 秒自動更新</p>
         <div className="mt-3 space-y-2">
           {others.length === 0 && (
             <p className="rounded-2xl border border-dashed border-arena-line p-6 text-center text-sm text-slate-500">
@@ -234,6 +286,36 @@ export function GymArena({
         對戰結束由任一方回報比分，敗方確認後才計分；
         {AUTO_CONFIRM_MINUTES} 分鐘未確認會自動成立。
       </p>
-    </div>
+      </div>
+
+      {/*
+        對戰已經成立，這層只是「告訴他發生什麼事」，沒有拒絕的選項——
+        所以不給關閉鈕，倒數完就自動進場。
+      */}
+      {active && (
+        <div className="fixed inset-0 z-[95] flex flex-col items-center justify-center bg-arena-deep/97 p-6 text-center backdrop-blur">
+          <p className="text-[13vw] leading-none">{active.opponentAvatar}</p>
+          <p className="mt-4 text-2xl font-black text-cyanx text-glow">
+            {active.challengedMe ? "⚔️ 有人向你挑戰！" : "⚔️ 對戰進行中"}
+          </p>
+          <p className="mt-2 text-lg font-black">
+            {active.opponentNickname}
+            {active.challengedMe ? " 向你發起挑戰" : " 還在等你"}
+          </p>
+
+          <button
+            onClick={() => router.push(`/ladder/match/${active.matchId}`)}
+            className="btn-x mt-8 w-full max-w-xs py-4 text-lg"
+          >
+            進入對戰
+          </button>
+          <p className="mt-3 font-num text-sm text-slate-400">
+            {enterIn !== null && enterIn > 0
+              ? `${enterIn} 秒後自動進入⋯`
+              : "進入中⋯"}
+          </p>
+        </div>
+      )}
+    </>
   );
 }

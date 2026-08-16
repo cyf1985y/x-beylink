@@ -53,8 +53,9 @@ export default async function LadderMatchPage({
   const myPlayerId =
     [match.player_a, match.player_b].find((id) => myIds.has(id)) ?? null;
 
+  // 橫向時放寬版面，讓紅藍兩側真的左右對開（直向維持原本的手機寬度）
   return (
-    <main className="mx-auto max-w-md px-4 py-8">
+    <main className="mx-auto max-w-md px-4 py-8 landscape:max-w-3xl landscape:py-4">
       <Link
         href={match.gym_id ? `/ladder/gym/${match.gym_id}` : "/ladder"}
         className="text-sm text-slate-400 hover:text-slate-200"

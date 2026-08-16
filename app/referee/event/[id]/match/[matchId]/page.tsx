@@ -64,7 +64,7 @@ export default async function RefereeMatchPage({
   };
 
   return (
-    <main className="mx-auto max-w-md px-4 py-6">
+    <main className="mx-auto max-w-md px-4 py-6 landscape:max-w-3xl landscape:py-4">
       <div className="flex items-center justify-between">
         <Link
           href={`/referee/event/${event.id}`}

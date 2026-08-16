@@ -262,7 +262,8 @@ export function ScoreboardLive({
         </span>
       </header>
 
-      <div className="flex flex-1 items-stretch gap-3 py-2">
+      {/* 橫向時紅方在左、藍方在右，按鈕列跟著同一側 */}
+      <div className="flex flex-1 items-stretch gap-3 py-2 landscape:flex-row-reverse">
         <Side p={player1} score={s1} side={1} />
         <div className="flex items-center">
           <span className="font-num text-[4vh] font-bold text-violetx">:</span>
@@ -272,18 +273,18 @@ export function ScoreboardLive({
 
       {canScore ? (
         <>
-          {/* 就位 → 3、2、1、GO SHOOT → 對戰 → 判定 */}
+          {/* 就位 → Three、Two、One、GO → 對戰 → 判定 */}
           <RoundCountdown
             disabled={!!winnerId}
             className="mb-2 w-full rounded-xl border-2 border-gold/70 bg-gold/15 py-[1.6vh] text-[2.4vh] font-black tracking-widest text-gold transition active:scale-95 disabled:opacity-30"
           />
           {/* 得分：兩側各一組結束方式 */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 landscape:flex-row-reverse">
             <FinishButtons side={1} />
             <FinishButtons side={2} />
           </div>
           {/* 修正：犯規扣分、重射與復原同一列 */}
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex gap-2 landscape:flex-row-reverse">
             <MinusButton side={1} />
             <ReshootButton
               disabled={pending || !!winnerId}
