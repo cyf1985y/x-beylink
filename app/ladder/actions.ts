@@ -1,7 +1,9 @@
 "use server";
 
+import { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/admin";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import {
   DbGymPublic,
@@ -70,23 +72,66 @@ async function myPlayers(): Promise<DbPlayer[]> {
 /* --------------------------------- 進道館 --------------------------------- */
 
 /**
+ * 管理員免定位進場。
+ *
+ * ladder_enter_gym 只要帶 p_token 就走 QR 驗證、完全跳過 radius_m 比對——
+ * 這裡是借用那條既有路徑，所以不必改 RPC、也不必改 schema。
+ * qr_token 全程只在伺服器端取用，絕不回傳給瀏覽器
+ * （gyms_public view 本來就不含這個欄位，這裡是特地讀基礎表）。
+ *
+ * 回傳 null 代表這座道館沒有 token，呼叫端請退回一般的定位驗證。
+ */
+async function enterGymAsAdmin(
+  db: SupabaseClient,
+  gym: DbGymPublic,
+  playerId: string
+): Promise<LadderResult | null> {
+  const { data } = await db
+    .from("gyms")
+    .select("qr_token")
+    .eq("id", gym.id)
+    .maybeSingle<{ qr_token: string }>();
+  if (!data?.qr_token) return null;
+
+  const res = await ladderRpc(db, "ladder_enter_gym", {
+    p_gym_id: gym.id,
+    p_player_id: playerId,
+    p_token: data.qr_token,
+  });
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: ladderErrorMessage(res.error_code, { radiusM: gym.radius_m }),
+    };
+  }
+
+  // 這是繞過現場驗證的行為，留一筆可追查的紀錄（不含任何座標）
+  console.warn(`管理員免定位進場：gym=${gym.id} player=${playerId}`);
+
+  revalidatePath(`/ladder/gym/${gym.id}`);
+  return {
+    ok: true,
+    message: `已以管理員身分進入${gym.name}（未驗證位置）`,
+  };
+}
+
+/**
  * 進入道館。
  *
  * lat／lng 由瀏覽器一次性取得後直接當參數傳進 RPC，
  * 全程不寫 log、不存表、不放進 URL——這是天梯 M1 的硬性要求。
+ *
+ * 管理員可以免定位進場（lat／lng 傳 null）：走 RPC 既有的 QR token 路徑，
+ * 不需要改資料庫或 RPC。權限一律在伺服器端判定，前端傳什麼都不影響。
  */
 export async function enterGym(
   gymId: string,
   playerId: string,
-  lat: number,
-  lng: number
+  lat: number | null,
+  lng: number | null
 ): Promise<LadderResult> {
   const mine = await requireMyPlayer(playerId);
   if (mine.error) return { ok: false, error: mine.error };
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return { ok: false, error: "無法取得你的位置，請允許定位後再試一次" };
-  }
 
   const db = supabaseAdmin();
   const { data: gym } = await db
@@ -95,6 +140,16 @@ export async function enterGym(
     .eq("id", gymId)
     .maybeSingle<DbGymPublic>();
   if (!gym) return { ok: false, error: "找不到這座道館" };
+
+  if (await isAdmin(await getSession())) {
+    const bypass = await enterGymAsAdmin(db, gym, playerId);
+    if (bypass) return bypass;
+    // 取不到 token 就當作沒有這條路，繼續走一般的定位驗證
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false, error: "無法取得你的位置，請允許定位後再試一次" };
+  }
 
   const res = await ladderRpc(db, "ladder_enter_gym", {
     p_gym_id: gymId,

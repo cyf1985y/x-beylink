@@ -33,9 +33,12 @@ const AUTO_ENTER_SECONDS = 5;
 export function GymArena({
   gym,
   myPlayers,
+  isAdmin = false,
 }: {
   gym: { id: string; name: string; radiusM: number };
   myPlayers: MyPlayer[];
+  /** 平台管理員：多一顆免定位進場（權限仍由伺服器端再驗一次） */
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [playerId, setPlayerId] = useState(myPlayers[0]?.id ?? "");
@@ -157,6 +160,25 @@ export function GymArena({
     );
   };
 
+  /**
+   * 管理員免定位進場：不呼叫 geolocation，座標傳 null。
+   * 伺服器端會再驗一次身分，前端這顆按鈕不是權限本身。
+   */
+  const handleEnterAsAdmin = async () => {
+    setError(null);
+    setMessage(null);
+    if (!playerId) {
+      setError("請先選擇要出賽的選手");
+      return;
+    }
+    setBusy(true);
+    const r = await enterGym(gym.id, playerId, null, null);
+    setBusy(false);
+    if (!r.ok) setError(r.error ?? "進場失敗");
+    else setMessage(r.message ?? "已進場");
+    refresh();
+  };
+
   const handleChallenge = async (opponentId: string) => {
     setError(null);
     setMessage(null);
@@ -227,6 +249,21 @@ export function GymArena({
               ? "重新進場（延長時間）"
               : "📍 進入道館"}
         </button>
+
+        {isAdmin && (
+          <>
+            <button
+              onClick={handleEnterAsAdmin}
+              disabled={busy}
+              className="mt-2 w-full rounded-xl border border-dashed border-gold/60 bg-gold/5 py-2.5 text-sm font-bold text-gold transition active:scale-95 disabled:opacity-40"
+            >
+              🔓 管理員進場（不驗證位置）
+            </button>
+            <p className="mt-1.5 text-center text-[11px] text-slate-500">
+              只有平台管理員看得到這顆；用它進場的對戰一樣會計分。
+            </p>
+          </>
+        )}
 
         {error && (
           <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
