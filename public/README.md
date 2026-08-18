@@ -10,28 +10,33 @@
 `decodeAudioData` 吃得下 mp3／m4a／wav／ogg，換檔案時改 `lib/sound.ts` 的
 `COUNTDOWN_SRC` 常數即可，不必轉檔。
 
-### 已量測的內容（ffmpeg 解碼後取 5ms RMS 包絡線）
+### 已量測的內容（ffmpeg 解碼後取 2.5ms RMS 包絡線）
 
 | 段 | 起音 | 結束 | 長度 | 內容 |
 |---|---|---|---|---|
-| 1 | 615 ms | 810 ms | 195 ms | Three |
-| 2 | 1440 ms | 1645 ms | 205 ms | Two |
-| 3 | 2230 ms | 2400 ms | 170 ms | One |
-| 4 | 3180 ms | 3320 ms | 140 ms | GO |
+| 1 | 578 ms | 868 ms | 290 ms | Three |
+| 2 | 1372 ms | 1692 ms | 320 ms | Two |
+| 3 | 2175 ms | 2485 ms | 310 ms | One |
+| 4 | 2890 ms | 2995 ms | 105 ms | Go |
+| — | 3015 ms | 3365 ms | 350 ms | **Shoot（不播）** |
 
-實際拍距 825／790／950 ms，不是規格的 800 均等——自然人聲本來就這樣，
-所以程式吃 `BEAT_OFFSETS` 而不是寫死一拍 800ms。
+⚠️ **Go 與 Shoot 是連讀的**，中間只有 20ms 低谷（最低點 3002ms，RMS 0.0023），
+不是分開的兩個字。用一般門檻的分段器會把它們看成同一段 475ms 的聲音——
+第一次量就是這樣量錯的，把 Shoot 的起點當成了 Go。
 
 對應到 `components/RoundCountdown.tsx` 的三個常數：
 
 ```ts
-const BEAT_OFFSETS = [0, 825, 1615, 2565];  // 四拍相對第一個字
-const LEAD_SILENCE_MS = 615;                // 開頭靜音，播放時跳過
-const PLAY_MS = 0;                          // 0 = 播到檔尾（沒有多餘的字要切）
+const BEAT_OFFSETS = [0, 795, 1598, 2308];  // 四拍相對第一個字
+const LEAD_SILENCE_MS = 578;                // 開頭靜音，播放時跳過
+const PLAY_MS = 2425;                       // 切在 Go／Shoot 的低谷
 ```
 
-⚠️ **換錄音時三個都要一起改。** 尤其 `PLAY_MS`：它是用來切掉尾巴多餘字的
-（舊版錄音多唸了 Shoot），如果新錄音是乾淨四個字卻沿用舊值，結尾會被切掉。
+切點離 Go 結束只有 8ms、離 Shoot 起音只有 12ms，所以 `playCountdown` 在收尾
+加了 40ms 淡出，避免硬切爆音、也蓋掉可能滲出的 `sh` 氣音。
+
+**量錄音時務必用低門檻（峰值的 2% 上下）並要求 150ms 以上的靜音才算斷字**，
+否則連讀的字會被合併、氣音起頭的字會被截掉開頭。
 
 ### 換音檔時的校準方式（約 30 秒）
 

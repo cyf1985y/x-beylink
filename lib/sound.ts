@@ -191,10 +191,23 @@ export function playCountdown(
   try {
     const src = ac.createBufferSource();
     src.buffer = countdownBuffer;
-    src.connect(ac.destination);
+
     if (durationSeconds && durationSeconds > 0) {
+      // 切點可能離下一個字只有十幾毫秒，硬切會爆音、也可能讓下個字的
+      // 氣音滲出來。收尾用一小段淡出蓋掉。
+      const gain = ac.createGain();
+      src.connect(gain);
+      gain.connect(ac.destination);
+
+      const t0 = ac.currentTime;
+      const fade = Math.min(0.04, durationSeconds / 4);
+      gain.gain.setValueAtTime(1, t0);
+      gain.gain.setValueAtTime(1, t0 + durationSeconds - fade);
+      gain.gain.linearRampToValueAtTime(0, t0 + durationSeconds);
+
       src.start(0, Math.max(0, offsetSeconds), durationSeconds);
     } else {
+      src.connect(ac.destination);
       src.start(0, Math.max(0, offsetSeconds));
     }
     return () => {
