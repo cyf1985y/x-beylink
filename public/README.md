@@ -5,7 +5,7 @@
 計分板「▶ 開始回合」的四拍英文倒數語音（Three, Two, One, GO!，**沒有 SHOOT**）。
 `components/RoundCountdown.tsx` 會抓這個檔案，用 Web Audio 解碼後播放。
 
-實錄檔：3.631 秒、44.1kHz、mp3、57.6 KB、動態範圍 47.9 dB。
+實錄檔：3.840 秒、44.1kHz、mp3、60.9 KB、動態範圍 45.3 dB。
 
 `decodeAudioData` 吃得下 mp3／m4a／wav／ogg，換檔案時改 `lib/sound.ts` 的
 `COUNTDOWN_SRC` 常數即可，不必轉檔。
@@ -14,29 +14,34 @@
 
 | 段 | 起音 | 結束 | 長度 | 內容 |
 |---|---|---|---|---|
-| 1 | 578 ms | 868 ms | 290 ms | Three |
-| 2 | 1372 ms | 1692 ms | 320 ms | Two |
-| 3 | 2175 ms | 2485 ms | 310 ms | One |
-| 4 | 2890 ms | 2995 ms | 105 ms | Go |
-| — | 3015 ms | 3365 ms | 350 ms | **Shoot（不播）** |
+| 1 | 55 ms | 440 ms | 385 ms | Three |
+| — | 778 ms | 828 ms | 50 ms | 雜音／呼吸聲，**不是字** |
+| 2 | 1108 ms | 1610 ms | 502 ms | Two |
+| 3 | 2062 ms | 2710 ms | 648 ms | One |
+| 4 | 3222 ms | 3790 ms | 568 ms | Go |
 
-⚠️ **Go 與 Shoot 是連讀的**，中間只有 20ms 低谷（最低點 3002ms，RMS 0.0023），
-不是分開的兩個字。用一般門檻的分段器會把它們看成同一段 475ms 的聲音——
-第一次量就是這樣量錯的，把 Shoot 的起點當成了 Go。
+拍距 1053／954／1160 ms，比交接單規格的 800ms 慢——這是實錄的自然節奏，
+程式吃 `BEAT_OFFSETS` 就是為了不必遷就規格。倒數總長約 3.8 秒。
 
-對應到 `components/RoundCountdown.tsx` 的三個常數：
+對應到 `components/RoundCountdown.tsx` 的四個常數：
 
 ```ts
-const BEAT_OFFSETS = [0, 795, 1598, 2308];  // 四拍相對第一個字
-const LEAD_SILENCE_MS = 578;                // 開頭靜音，播放時跳過
-const PLAY_MS = 2425;                       // 切在 Go／Shoot 的低谷
+const BEAT_OFFSETS = [0, 1053, 2007, 3167];  // 四拍相對第一個字
+const LEAD_SILENCE_MS = 55;                  // 開頭靜音，播放時跳過
+const PLAY_MS = 0;                           // 0 = 播到檔尾（沒有多餘的字要切）
+const TAIL_MS = 650;                         // 必須 > GO 這個字的長度（568ms）
 ```
 
-切點離 Go 結束只有 8ms、離 Shoot 起音只有 12ms，所以 `playCountdown` 在收尾
-加了 40ms 淡出，避免硬切爆音、也蓋掉可能滲出的 `sh` 氣音。
+⚠️ **換錄音時四個都要一起檢查**：
+
+- `PLAY_MS`：只有在錄音尾巴有多餘的字（例如唸成「Go Shoot」）時才設非 0。
+  乾淨四字的錄音沿用非 0 的舊值，會把 GO 切掉。
+- `TAIL_MS`：必須大於「GO」這個字本身的長度，否則畫面會在字還沒唸完就收掉。
+  這一版的 GO 長 568ms，所以 400ms 不夠用，改成 650ms。
 
 **量錄音時務必用低門檻（峰值的 2% 上下）並要求 150ms 以上的靜音才算斷字**，
-否則連讀的字會被合併、氣音起頭的字會被截掉開頭。
+否則連讀的字會被合併、氣音起頭的字會被截掉開頭。前一版錄音的「Go Shoot」
+就是連讀的（中間只有 20ms 低谷），用一般門檻會把兩個字看成同一段。
 
 ### 換音檔時的校準方式（約 30 秒）
 
