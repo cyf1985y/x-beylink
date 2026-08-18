@@ -138,10 +138,10 @@ export function beepGo() {
  * 也刻意不走 <audio>——iPhone 的實體靜音撥桿會讓 <audio> 完全沒聲音，
  * 必須走 Web Audio 並搭配 enableAudioSession()。
  *
- * 目前放的是手機實錄的 m4a（AAC）；decodeAudioData 吃得下 mp3／m4a／wav／ogg，
+ * 目前放的是實錄的 mp3；decodeAudioData 吃得下 mp3／m4a／wav／ogg，
  * 換檔案時改這個常數即可。四拍在檔案裡的實際位置見 RoundCountdown 的 BEAT_OFFSETS。
  */
-export const COUNTDOWN_SRC = "/countdown-321go.m4a";
+export const COUNTDOWN_SRC = "/countdown-321go.mp3";
 
 let countdownBuffer: AudioBuffer | null = null;
 let countdownLoading: Promise<AudioBuffer | null> | null = null;

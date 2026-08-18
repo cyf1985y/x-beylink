@@ -14,23 +14,24 @@ import {
 /**
  * 四拍在語音檔中的起音點（ms，相對於第一個字）。
  *
- * 這組數字是從 public/countdown-321go.m4a 實測出來的（解碼後取 5ms 解析度的
+ * 這組數字是從 public/countdown-321go.mp3 實測出來的（解碼後取 5ms 解析度的
  * RMS 包絡線抓起音點），不是規格值——真人講話不會落在 800ms 的整數倍上。
  * 換音檔時用 /countdown-calibrate.html 重新量一次再貼回來。
  */
-const BEAT_OFFSETS = [0, 845, 1845, 2700];
+const BEAT_OFFSETS = [0, 825, 1615, 2565];
 /**
  * 音檔開頭到第一個字之間的靜音（ms）。
  * 播放時直接從這裡起播，畫面第一拍才會和聽到第一個字的瞬間對齊。
  */
-const LEAD_SILENCE_MS = 140;
+const LEAD_SILENCE_MS = 615;
 /**
- * 只播這麼長（ms，從第一個字算起）。
+ * 只播這麼長（ms，從第一個字算起）；0 代表播到檔案結束。
  *
- * 實錄檔在 3625ms 處還有第 5 段聲音——依交接單「SHOOT 拿掉」的要求，
- * 播到 GO 結束（相對 2845ms）之後就切掉，不必為了這件事重錄。
+ * 目前的錄音就是乾淨的四個字，尾巴沒有多餘的字要切，所以設 0。
+ * 若換成尾巴還有別的字的錄音（例如舊版多唸了 Shoot），把這裡設成
+ * 「最後一個字結束」與「多餘那個字起音」之間的任一個值即可。
  */
-const PLAY_MS = 3060;
+const PLAY_MS = 0;
 /** GO 之後停留多久才回到計分畫面 */
 const TAIL_MS = 400;
 /** 四拍：Three → Two → One → GO（沒有 SHOOT） */
@@ -41,7 +42,7 @@ const LAST = BEATS.length - 1;
  * 「Three、Two、One、GO」四拍全螢幕倒數。
  *
  * 天梯沒有裁判、家長裁判也不好意思喊——這顆按鈕就是裁判。
- * 聲音走 public/countdown-321go.m4a 單一音檔（Web Audio 播放，蓋得過 iPhone 靜音撥桿）；
+ * 聲音走 public/countdown-321go.mp3 單一音檔（Web Audio 播放，蓋得過 iPhone 靜音撥桿）；
  * 音檔載不到時退回合成嗶聲，拍子與畫面完全一樣，只是沒有人聲。
  * 畫面用 BEAT_OFFSETS 的時間戳對齊音檔，不逐拍重算。
  * 倒數中點畫面任意處即可取消（誤觸不用等它跑完）。

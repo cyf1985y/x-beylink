@@ -1,33 +1,37 @@
 # public／靜態檔
 
-## countdown-321go.m4a
+## countdown-321go.mp3
 
 計分板「▶ 開始回合」的四拍英文倒數語音（Three, Two, One, GO!，**沒有 SHOOT**）。
 `components/RoundCountdown.tsx` 會抓這個檔案，用 Web Audio 解碼後播放。
 
-目前放的是**手機實錄檔**：5.013 秒、48kHz、AAC，47.9 KB。
+實錄檔：3.631 秒、44.1kHz、mp3、57.6 KB、動態範圍 47.9 dB。
 
 `decodeAudioData` 吃得下 mp3／m4a／wav／ogg，換檔案時改 `lib/sound.ts` 的
 `COUNTDOWN_SRC` 常數即可，不必轉檔。
 
 ### 已量測的內容（ffmpeg 解碼後取 5ms RMS 包絡線）
 
-| 段 | 起音 | 結束 | 長度 | 對應 |
+| 段 | 起音 | 結束 | 長度 | 內容 |
 |---|---|---|---|---|
-| 1 | 140 ms | 455 ms | 315 ms | Three |
-| 2 | 985 ms | 1345 ms | 360 ms | Two |
-| 3 | 1985 ms | 2285 ms | 300 ms | One |
-| 4 | 2840 ms | 2985 ms | 145 ms | GO |
-| 5 | 3625 ms | 3750 ms | 125 ms | **Shoot（不播）** |
+| 1 | 615 ms | 810 ms | 195 ms | Three |
+| 2 | 1440 ms | 1645 ms | 205 ms | Two |
+| 3 | 2230 ms | 2400 ms | 170 ms | One |
+| 4 | 3180 ms | 3320 ms | 140 ms | GO |
 
-實際拍距是 845／1000／855 ms，不是規格的 800 均等——自然人聲本來就這樣，
-所以程式改成吃 `BEAT_OFFSETS` 而不是寫死一拍 800ms。
+實際拍距 825／790／950 ms，不是規格的 800 均等——自然人聲本來就這樣，
+所以程式吃 `BEAT_OFFSETS` 而不是寫死一拍 800ms。
 
-錄音實際唸的是「Three, Two, One, Go, **Shoot**」（已由錄音者確認），
-而交接單要求四拍、SHOOT 拿掉。處理方式是**播放時切掉**，不必重錄：
-`PLAY_MS = 3060`（相對第一個字）——GO 完整播完，Shoot 播不到。
+對應到 `components/RoundCountdown.tsx` 的三個常數：
 
-重錄成四個字的版本時，記得把 `PLAY_MS` 一起改掉或設成涵蓋全長。
+```ts
+const BEAT_OFFSETS = [0, 825, 1615, 2565];  // 四拍相對第一個字
+const LEAD_SILENCE_MS = 615;                // 開頭靜音，播放時跳過
+const PLAY_MS = 0;                          // 0 = 播到檔尾（沒有多餘的字要切）
+```
+
+⚠️ **換錄音時三個都要一起改。** 尤其 `PLAY_MS`：它是用來切掉尾巴多餘字的
+（舊版錄音多唸了 Shoot），如果新錄音是乾淨四個字卻沿用舊值，結尾會被切掉。
 
 ### 換音檔時的校準方式（約 30 秒）
 
