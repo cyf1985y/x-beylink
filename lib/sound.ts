@@ -6,11 +6,15 @@ let AC: AudioContext | null = null;
 
 function ctx(): AudioContext | null {
   try {
-    AC =
-      AC ??
-      new (window.AudioContext ??
+    if (!AC) {
+      // 用途必須在「建立 AudioContext 之前」宣告。iOS 是在建立的當下決定
+      // audio session 類別的，context 生出來之後再設 playback 已經來不及，
+      // 那顆 context 會一直屬於被實體靜音撥桿靜音的預設類別。
+      enableAudioSession();
+      AC = new (window.AudioContext ??
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext)();
+    }
     return AC;
   } catch {
     return null;
@@ -49,7 +53,19 @@ function tone(
  */
 export function unlockAudio() {
   const ac = ctx();
-  if (ac && ac.state === "suspended") ac.resume().catch(() => {});
+  if (!ac) return;
+  if (ac.state === "suspended") ac.resume().catch(() => {});
+
+  // iOS 的老招：在使用者手勢裡實際播一個極短的無聲 buffer。
+  // 光是 resume() 有時候不足以把音訊管線真的打開。
+  try {
+    const src = ac.createBufferSource();
+    src.buffer = ac.createBuffer(1, 1, 22050);
+    src.connect(ac.destination);
+    src.start(0);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
