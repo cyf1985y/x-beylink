@@ -106,6 +106,26 @@ export function GymArena({
     return () => clearTimeout(t);
   }, [enterIn, activeMatchId, router]);
 
+  /**
+   * 把「出賽選手」對齊「現在人在場上的那位」。
+   *
+   * playerId 初值只能取 myPlayers[0]，而那是帳號裡最早建立的選手，
+   * 跟剛才下場的是誰無關。家長＋小孩各一位的帳號打完一場回到道館，
+   * 選單會彈回沒進場的那位 → minutesLeft 變 null → 挑戰鈕整個變灰，
+   * 橫幅還叫人「先進場」，但他明明剛在這裡打完一場。
+   *
+   * 只校正一次：之後使用者手動切換選手時，不能被輪詢一直彈回來。
+   */
+  const alignedToPresence = useRef(false);
+  useEffect(() => {
+    if (alignedToPresence.current || !state) return;
+    alignedToPresence.current = true;
+    const present = state.myPresence.find(
+      (p) => new Date(p.expiresAt).getTime() > Date.now()
+    );
+    if (present && present.playerId !== playerId) setPlayerId(present.playerId);
+  }, [state, playerId]);
+
   const myPresence = state?.myPresence.find((p) => p.playerId === playerId);
   const minutesLeft = myPresence
     ? Math.max(

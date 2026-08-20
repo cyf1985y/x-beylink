@@ -70,6 +70,7 @@ export default async function LadderMatchPage({
       <div className="mt-6">
         <LadderMatchPanel
           matchId={match.id}
+          gymId={match.gym_id}
           playerA={playerA}
           playerB={playerB}
           myPlayerId={myPlayerId}

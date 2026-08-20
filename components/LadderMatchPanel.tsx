@@ -6,6 +6,7 @@ import {
   addLadderFinish,
   addLadderPenalty,
   addLadderReshoot,
+  challenge,
   clearLadderRounds,
   confirmResult,
   disputeResult,
@@ -76,12 +77,15 @@ type Finish = (typeof FINISH_TYPES)[number];
  */
 export function LadderMatchPanel({
   matchId,
+  gymId,
   playerA,
   playerB,
   myPlayerId,
   initial,
   initialRounds,
 }: {
+  /** 這場的道館；結算後「再打一場」要帶人回去，沒有就只能回天梯 */
+  gymId: string | null;
   matchId: string;
   playerA: P;
   playerB: P;
@@ -98,6 +102,31 @@ export function LadderMatchPanel({
   const [message, setMessage] = useState<string | null>(null);
 
   const [next, setNext] = useState<NextMatch | null>(null);
+
+  /**
+   * 再戰一次：現場的節奏是打完立刻「再來一場」，回道館再找人按挑戰太慢。
+   * 對手沿用下面既有的 opponent（點擊時才執行，那時已初始化）。
+   * 輸的一方尤其需要這個入口——不然結算畫面對他來說是死路。
+   */
+  const handleRematch = async () => {
+    if (!gymId || !myPlayerId) return;
+    setError(null);
+    setMessage(null);
+    setBusy(true);
+    const r = await challenge(gymId, myPlayerId, opponent.id);
+    setBusy(false);
+    if (r.ok && r.matchId) {
+      router.push(`/ladder/match/${r.matchId}`);
+      return;
+    }
+    // 雙方同時按時只有一方會成功。這不是錯誤——另一方的 getNextMatch 輪詢
+    // 會在約 2 秒內把他帶進同一場，所以只給一句安撫的話，不要跳紅字。
+    if (r.code === "match_in_progress") {
+      setMessage("對手已經開了一場，正在進入…");
+      return;
+    }
+    setError(r.error ?? "開新的一場失敗");
+  };
   const [countdown, setCountdown] = useState<number | null>(null);
   const [visible, setVisible] = useState(true);
   /** 盯下一場的截止時間，以及停掉之後的手動查詢狀態 */
@@ -689,12 +718,40 @@ export function LadderMatchPanel({
               這一場不計分：同一天和同一位對手已達上限，或今日計分場數已滿 3 場。
             </p>
           )}
+          {/*
+            出口的優先順序照現場的實際節奏排：先「跟同一個人再打一場」，
+            其次「回道館換對手」，最後才是離開現場的「回天梯總覽」。
+            舊版只有一顆「回天梯」，等於把人帶離道館——而下一場只會在道館裡發生。
+          */}
+          {gymId && myPlayerId && (
+            <button
+              onClick={handleRematch}
+              disabled={busy}
+              className="btn-x mt-4 w-full disabled:opacity-40"
+            >
+              {busy ? "開場中…" : `⚔️ 再戰一次（對 ${opponent.nickname}）`}
+            </button>
+          )}
           <button
-            onClick={() => router.push("/ladder")}
-            className="btn-x mt-4 w-full"
+            onClick={() =>
+              router.push(gymId ? `/ladder/gym/${gymId}` : "/ladder")
+            }
+            className={
+              gymId && myPlayerId
+                ? "mt-2 w-full rounded-xl border border-arena-line py-2.5 text-sm font-bold text-slate-300 transition active:scale-95"
+                : "btn-x mt-4 w-full"
+            }
           >
-            回天梯
+            {gymId ? "🏟️ 回道館換對手" : "回天梯"}
           </button>
+          {gymId && (
+            <button
+              onClick={() => router.push("/ladder")}
+              className="mt-2 w-full py-2 text-sm text-slate-500 transition active:scale-95"
+            >
+              回天梯總覽
+            </button>
+          )}
         </section>
       )}
 

@@ -32,6 +32,12 @@ import {
 export type LadderResult = {
   ok: boolean;
   error?: string;
+  /**
+   * RPC 的原始錯誤碼（例如 match_in_progress）。
+   * 呼叫端要「依錯誤種類分流」時比對這個，不要去比對中文字串——
+   * 文案隨時會改，比對中文的判斷會安靜地失效。
+   */
+  code?: string;
   message?: string;
   /** ladder_challenge 成功時回傳新對戰 id */
   matchId?: string;
@@ -185,7 +191,11 @@ export async function challenge(
     p_opponent: opponentId,
   });
   if (!res.ok) {
-    return { ok: false, error: ladderErrorMessage(res.error_code) };
+    return {
+      ok: false,
+      error: ladderErrorMessage(res.error_code),
+      code: res.error_code ?? undefined,
+    };
   }
 
   revalidatePath(`/ladder/gym/${gymId}`);
