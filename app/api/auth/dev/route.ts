@@ -6,6 +6,9 @@ import { baseUrl } from "@/lib/line";
 
 export const dynamic = "force-dynamic";
 
+/** 已部署環境允許假登入的測試帳號（對應 users.line_user_id 的 DEV_ 後綴） */
+const DEPLOYED_ACCOUNTS = ["DUMMY"];
+
 /**
  * 開發／測試用假登入。
  *
@@ -31,6 +34,11 @@ export async function GET(req: NextRequest) {
   }
 
   const as = url.searchParams.get("as") ?? "tester1";
+  // 已部署的環境只認白名單裡的測試帳號。少了這道，帶對 token 的人可以
+  // 隨意捏造 DEV_xxx 帳號灌進排行榜；本機開發不受限，想開幾個都行。
+  if (process.env.NODE_ENV === "production" && !DEPLOYED_ACCOUNTS.includes(as)) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
   const lineUserId = `DEV_${as}`;
 
   const db = supabaseAdmin();
