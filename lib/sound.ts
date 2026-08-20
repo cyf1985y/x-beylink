@@ -6,11 +6,15 @@ let AC: AudioContext | null = null;
 
 function ctx(): AudioContext | null {
   try {
-    AC =
-      AC ??
-      new (window.AudioContext ??
+    if (!AC) {
+      // 用途必須在「建立 AudioContext 之前」宣告。iOS 是在建立的當下決定
+      // audio session 類別的，context 生出來之後再設 playback 已經來不及，
+      // 那顆 context 會一直屬於被實體靜音撥桿靜音的預設類別。
+      enableAudioSession();
+      AC = new (window.AudioContext ??
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext)();
+    }
     return AC;
   } catch {
     return null;
@@ -49,7 +53,35 @@ function tone(
  */
 export function unlockAudio() {
   const ac = ctx();
-  if (ac && ac.state === "suspended") ac.resume().catch(() => {});
+  if (!ac) return;
+  if (ac.state === "suspended") ac.resume().catch(() => {});
+
+  // iOS 的老招：在使用者手勢裡實際播一個極短的無聲 buffer。
+  // 光是 resume() 有時候不足以把音訊管線真的打開。
+  try {
+    const src = ac.createBufferSource();
+    src.buffer = ac.createBuffer(1, 1, 22050);
+    src.connect(ac.destination);
+    src.start(0);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 宣告音訊用途，讓聲音蓋過 iPhone 的實體靜音撥桿。
+ *
+ * 小孩的手機十之八九是靜音的，而靜音撥桿一撥，<audio> 會完全沒聲音——
+ * 倒數走 Web Audio 就是為了這件事。navigator.audioSession 目前只有 Safari 有，
+ * 其他瀏覽器讀不到這個屬性，直接跳過即可。
+ */
+export function enableAudioSession() {
+  try {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (nav.audioSession) nav.audioSession.type = "playback";
+  } catch {
+    /* ignore */
+  }
 }
 
 export function vibrate(pattern: number | number[]) {
@@ -83,18 +115,111 @@ export function fanfare() {
   vibrate([120, 60, 120, 60, 220]);
 }
 
-/** 倒數的一拍（3、2、1）：短促的中音嗶 */
+/** 倒數的一拍（Three、Two、One）：短促的中音嗶 */
 export function beepCount() {
   tone(880, 0, 0.16, "square", 0.1);
   vibrate(60);
 }
 
-/** GO SHOOT！：上揚三連音 */
-export function beepGoShoot() {
+/** GO！：上揚三連音 */
+export function beepGo() {
   [988, 1319, 1568].forEach((f, i) =>
     tone(f, i * 0.07, 0.3, "triangle", 0.12)
   );
   vibrate([90, 40, 160]);
+}
+
+/* ------------------------------- 倒數英文語音 ------------------------------- */
+
+/**
+ * 四拍倒數語音檔：一個檔案連續唸完「Three, Two, One, GO!」。
+ *
+ * 刻意用「單一檔案」而不是四個檔案：四個檔各自載入解碼的時間不同，拍子會歪。
+ * 也刻意不走 <audio>——iPhone 的實體靜音撥桿會讓 <audio> 完全沒聲音，
+ * 必須走 Web Audio 並搭配 enableAudioSession()。
+ *
+ * 目前放的是實錄的 mp3；decodeAudioData 吃得下 mp3／m4a／wav／ogg，
+ * 換檔案時改這個常數即可。四拍在檔案裡的實際位置見 RoundCountdown 的 BEAT_OFFSETS。
+ */
+export const COUNTDOWN_SRC = "/countdown-321go.mp3";
+
+let countdownBuffer: AudioBuffer | null = null;
+let countdownLoading: Promise<AudioBuffer | null> | null = null;
+
+/**
+ * 預先載入並解碼倒數語音（畫面掛載時就先跑，按下按鈕才不用等）。
+ * 音檔不存在或解碼失敗都只是回傳 null，呼叫端會退回合成嗶聲。
+ */
+export function loadCountdown(): Promise<AudioBuffer | null> {
+  if (countdownBuffer) return Promise.resolve(countdownBuffer);
+  if (countdownLoading) return countdownLoading;
+
+  const ac = ctx();
+  if (!ac) return Promise.resolve(null);
+
+  countdownLoading = fetch(COUNTDOWN_SRC)
+    .then((r) => {
+      if (!r.ok) throw new Error(`countdown ${r.status}`);
+      return r.arrayBuffer();
+    })
+    .then((buf) => ac.decodeAudioData(buf))
+    .then((decoded) => {
+      countdownBuffer = decoded;
+      return decoded;
+    })
+    .catch(() => null);
+
+  return countdownLoading;
+}
+
+/**
+ * 播放倒數語音。
+ *
+ * offsetSeconds：從音檔的第幾秒開始播——錄音開頭那段靜音用這個跳過，
+ * 這樣畫面的第一拍和聽到「Three」的瞬間才會對齊。
+ * durationSeconds：只播這麼長。錄音尾巴多唸的字用這個切掉，不必重錄。
+ *
+ * 回傳停止函式（倒數中途取消要把聲音一起停掉）；
+ * 回傳 null 代表音檔還沒備妥，呼叫端請改用合成嗶聲頂著。
+ */
+export function playCountdown(
+  offsetSeconds = 0,
+  durationSeconds?: number
+): (() => void) | null {
+  const ac = ctx();
+  if (!ac || !countdownBuffer) return null;
+  try {
+    const src = ac.createBufferSource();
+    src.buffer = countdownBuffer;
+
+    if (durationSeconds && durationSeconds > 0) {
+      // 切點可能離下一個字只有十幾毫秒，硬切會爆音、也可能讓下個字的
+      // 氣音滲出來。收尾用一小段淡出蓋掉。
+      const gain = ac.createGain();
+      src.connect(gain);
+      gain.connect(ac.destination);
+
+      const t0 = ac.currentTime;
+      const fade = Math.min(0.04, durationSeconds / 4);
+      gain.gain.setValueAtTime(1, t0);
+      gain.gain.setValueAtTime(1, t0 + durationSeconds - fade);
+      gain.gain.linearRampToValueAtTime(0, t0 + durationSeconds);
+
+      src.start(0, Math.max(0, offsetSeconds), durationSeconds);
+    } else {
+      src.connect(ac.destination);
+      src.start(0, Math.max(0, offsetSeconds));
+    }
+    return () => {
+      try {
+        src.stop();
+      } catch {
+        /* 已經播完了 */
+      }
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** 重射：中性的兩聲下行提示（不是得分也不是失誤） */

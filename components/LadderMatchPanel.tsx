@@ -43,10 +43,17 @@ import {
 import { RoundCountdown } from "@/components/RoundCountdown";
 import { ReshootButton } from "@/components/ReshootButton";
 import { RoundTimeline } from "@/components/RoundTimeline";
+import { StatusBanner } from "@/components/StatusBanner";
 
 type P = { id: string; nickname: string; avatar: string };
 
-const POLL_MS = 5_000;
+/**
+ * 對戰狀態輪詢間隔。
+ *
+ * 一方按下「回報結果」之後，另一方要靠這個輪詢才會看到確認畫面——
+ * 現場節奏是贏的守台繼續打，慢一秒就是兩個小孩互看手機。
+ */
+const POLL_MS = 2_000;
 /** 結果成立後改查「下一場來了沒」，節奏可以慢一點 */
 const NEXT_POLL_MS = 10_000;
 /** 轉場橫幅自動進入的倒數秒數 */
@@ -192,6 +199,25 @@ export function LadderMatchPanel({
     if (state.status === "confirmed") router.refresh();
   }, [state.status, router]);
 
+  /**
+   * 勝方等待期間的「還剩幾秒自動成立」。
+   * 沒有這個數字，等待畫面看起來就像當掉了，人就會跑去亂點別的地方。
+   */
+  const [autoIn, setAutoIn] = useState<number | null>(null);
+  useEffect(() => {
+    if (state.status !== "pending_confirm" || !state.reportedAt) {
+      setAutoIn(null);
+      return;
+    }
+    const deadline =
+      new Date(state.reportedAt).getTime() + AUTO_CONFIRM_MINUTES * 60_000;
+    const tick = () =>
+      setAutoIn(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [state.status, state.reportedAt]);
+
   const isParticipant = !!myPlayerId;
   const iAmA = myPlayerId === playerA.id;
   const me = iAmA ? playerA : playerB;
@@ -303,7 +329,7 @@ export function LadderMatchPanel({
 
   const Side = ({ p, score, side }: { p: P; score: number; side: 1 | 2 }) => (
     <div
-      className={`flex-1 rounded-2xl border-2 p-3 text-center ${
+      className={`flex-1 rounded-2xl border-2 p-3 text-center landscape:p-2 ${
         side === 1
           ? "border-cyanx/60 bg-cyanx/5"
           : "border-red-400/60 bg-red-500/5"
@@ -316,9 +342,12 @@ export function LadderMatchPanel({
       >
         {side === 1 ? "藍方" : "紅方"}
       </p>
-      <p className="text-4xl">{p.avatar}</p>
+      <p className="text-4xl landscape:text-2xl">{p.avatar}</p>
       <p className="mt-1 truncate text-sm font-black">{p.nickname}</p>
-      <p className="font-num text-5xl font-bold leading-none">{score}</p>
+      {/* 橫向是給旁邊的人看的，比分放到最大 */}
+      <p className="font-num text-5xl font-bold leading-none landscape:text-[15vh]">
+        {score}
+      </p>
     </div>
   );
 
@@ -349,14 +378,56 @@ export function LadderMatchPanel({
     </div>
   );
 
+  /**
+   * 頂端白話狀態橫幅：小孩看的是這一句，不是按鈕長什麼樣。
+   * 每個狀態都要講清楚「現在輪到誰、要做什麼」。
+   */
+  function statusBanner(): {
+    tone: "info" | "wait" | "done" | "alert";
+    text: string;
+  } {
+    switch (state.status) {
+      case "playing":
+        if (!isParticipant) {
+          return { tone: "info", text: "對戰進行中，你是觀戰" };
+        }
+        return decided
+          ? { tone: "info", text: "已分出勝負——按下方「回報結果」" }
+          : { tone: "info", text: "打完後，任一方按「回報結果」" };
+      case "pending_confirm":
+        if (!isParticipant) {
+          return { tone: "wait", text: "比分已回報，等待敗方確認" };
+        }
+        if (winnerIsMe) {
+          return {
+            tone: "wait",
+            text:
+              autoIn === null
+                ? `等待 ${opponent.nickname} 確認結果`
+                : `等待 ${opponent.nickname} 確認——${autoIn} 秒後自動成立`,
+          };
+        }
+        return { tone: "wait", text: "換你了——確認對手回報的比分" };
+      case "confirmed":
+        return { tone: "done", text: "結果已成立，積分已更新" };
+      case "disputed":
+        return { tone: "alert", text: "這場已凍結，等待裁決" };
+      default:
+        return { tone: "alert", text: "這場對戰已作廢" };
+    }
+  }
+  const banner = statusBanner();
+
   // 底部固定欄（轉場橫幅／手動查詢二選一）會蓋住內容，要留出空間
   const hasBottomBar = !!next || watchExpired;
 
   return (
     <>
       <div className={`space-y-4 ${hasBottomBar ? "pb-40" : ""}`}>
-      {/* 比分顯示 */}
-      <div className="flex items-stretch gap-2">
+      <StatusBanner tone={banner.tone}>{banner.text}</StatusBanner>
+
+      {/* 比分顯示（橫向時紅方在左、藍方在右，與下方按鈕同一側） */}
+      <div className="flex items-stretch gap-2 landscape:flex-row-reverse">
         <Side
           p={playerA}
           score={state.status === "playing" ? sA : (state.scoreA ?? 0)}
@@ -394,11 +465,12 @@ export function LadderMatchPanel({
             </p>
           </div>
 
-          <div className="mt-3 flex gap-2">
+          {/* 四顆結束方式：橫向時各自落在自己那一側的比分下方 */}
+          <div className="mt-3 flex gap-2 landscape:flex-row-reverse">
             <Finishes side={1} />
             <Finishes side={2} />
           </div>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex gap-2 landscape:flex-row-reverse">
             <button
               type="button"
               disabled={busy}
@@ -519,6 +591,18 @@ export function LadderMatchPanel({
               <p className="mt-1 text-sm text-slate-400">
                 等待 {opponent.nickname} 按下確認後才會計分。
               </p>
+              {/* 沒有這個數字，等待畫面看起來就像當掉了 */}
+              {autoIn !== null && (
+                <p className="mt-3 font-num text-4xl font-black leading-none text-gold text-glow">
+                  {autoIn}
+                  <span className="ml-1 font-sans text-sm font-bold text-slate-400">
+                    秒後自動成立
+                  </span>
+                </p>
+              )}
+              <p className="mt-3 text-xs text-slate-500">
+                這頁會自己更新，不用回上一頁。
+              </p>
             </>
           ) : (
             <>
@@ -616,7 +700,7 @@ export function LadderMatchPanel({
 
       {state.status === "disputed" && (
         <p className="rounded-2xl border border-red-500/40 bg-red-500/10 p-6 text-center text-sm text-red-300">
-          這場對戰被標記為有爭議，積分不會變動。請找現場主辦方協助處理。
+          這場已凍結，等待裁決——積分不會變動。請找現場主辦方協助處理。
         </p>
       )}
 

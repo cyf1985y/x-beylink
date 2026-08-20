@@ -228,7 +228,8 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
           <VoiceToggle on={voiceOn} onToggle={() => setVoiceOn((v) => !v)} />
         </div>
 
-        <div className="mt-3 flex items-stretch gap-2">
+        {/* 橫向時 2P 在左、1P 在右，得分按鈕跟著同一側 */}
+        <div className="mt-3 flex items-stretch gap-2 landscape:flex-row-reverse">
           <ScoreCard
             player={match.player1}
             score={s1}
@@ -277,36 +278,43 @@ export function ScoringPanel({ match }: { match: ScoringMatch }) {
             <div className="mt-4">
               <RoundCountdown disabled={!ready} />
               <p className="mt-1.5 text-center text-[11px] text-slate-500">
-                按下會全螢幕倒數 3、2、1、GO SHOOT（有聲音）
+                按下會全螢幕倒數 Three、Two、One、GO（有語音）
               </p>
             </div>
 
-            <FinishRow
-              label={match.player1?.nickname ?? "選手 1"}
-              avatar={match.player1?.avatar ?? "❔"}
-              accent="cyan"
-              disabled={pending || !ready}
-              onFinish={(f) => doFinish(1, f)}
-              onPenalty={() =>
-                handle(
-                  () => addPenalty(match.eventId, match.id, 1),
-                  () => beepUndo()
-                )
-              }
-            />
-            <FinishRow
-              label={match.player2?.nickname ?? "選手 2"}
-              avatar={match.player2?.avatar ?? "❔"}
-              accent="violet"
-              disabled={pending || !ready}
-              onFinish={(f) => doFinish(2, f)}
-              onPenalty={() =>
-                handle(
-                  () => addPenalty(match.eventId, match.id, 2),
-                  () => beepUndo()
-                )
-              }
-            />
+            {/* 直向時上下疊、橫向時左右對開（2P 在左，與比分同側） */}
+            <div className="landscape:flex landscape:flex-row-reverse landscape:gap-3">
+              <div className="landscape:flex-1">
+                <FinishRow
+                  label={match.player1?.nickname ?? "選手 1"}
+                  avatar={match.player1?.avatar ?? "❔"}
+                  accent="cyan"
+                  disabled={pending || !ready}
+                  onFinish={(f) => doFinish(1, f)}
+                  onPenalty={() =>
+                    handle(
+                      () => addPenalty(match.eventId, match.id, 1),
+                      () => beepUndo()
+                    )
+                  }
+                />
+              </div>
+              <div className="landscape:flex-1">
+                <FinishRow
+                  label={match.player2?.nickname ?? "選手 2"}
+                  avatar={match.player2?.avatar ?? "❔"}
+                  accent="violet"
+                  disabled={pending || !ready}
+                  onFinish={(f) => doFinish(2, f)}
+                  onPenalty={() =>
+                    handle(
+                      () => addPenalty(match.eventId, match.id, 2),
+                      () => beepUndo()
+                    )
+                  }
+                />
+              </div>
+            </div>
 
             <div className="mt-3 flex gap-2">
               <ReshootButton

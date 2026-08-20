@@ -1,7 +1,9 @@
 "use server";
 
+import { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/admin";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import {
   DbGymPublic,
@@ -70,23 +72,66 @@ async function myPlayers(): Promise<DbPlayer[]> {
 /* --------------------------------- 進道館 --------------------------------- */
 
 /**
+ * 管理員免定位進場。
+ *
+ * ladder_enter_gym 只要帶 p_token 就走 QR 驗證、完全跳過 radius_m 比對——
+ * 這裡是借用那條既有路徑，所以不必改 RPC、也不必改 schema。
+ * qr_token 全程只在伺服器端取用，絕不回傳給瀏覽器
+ * （gyms_public view 本來就不含這個欄位，這裡是特地讀基礎表）。
+ *
+ * 回傳 null 代表這座道館沒有 token，呼叫端請退回一般的定位驗證。
+ */
+async function enterGymAsAdmin(
+  db: SupabaseClient,
+  gym: DbGymPublic,
+  playerId: string
+): Promise<LadderResult | null> {
+  const { data } = await db
+    .from("gyms")
+    .select("qr_token")
+    .eq("id", gym.id)
+    .maybeSingle<{ qr_token: string }>();
+  if (!data?.qr_token) return null;
+
+  const res = await ladderRpc(db, "ladder_enter_gym", {
+    p_gym_id: gym.id,
+    p_player_id: playerId,
+    p_token: data.qr_token,
+  });
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: ladderErrorMessage(res.error_code, { radiusM: gym.radius_m }),
+    };
+  }
+
+  // 這是繞過現場驗證的行為，留一筆可追查的紀錄（不含任何座標）
+  console.warn(`管理員免定位進場：gym=${gym.id} player=${playerId}`);
+
+  revalidatePath(`/ladder/gym/${gym.id}`);
+  return {
+    ok: true,
+    message: `已以管理員身分進入${gym.name}（未驗證位置）`,
+  };
+}
+
+/**
  * 進入道館。
  *
  * lat／lng 由瀏覽器一次性取得後直接當參數傳進 RPC，
  * 全程不寫 log、不存表、不放進 URL——這是天梯 M1 的硬性要求。
+ *
+ * 管理員可以免定位進場（lat／lng 傳 null）：走 RPC 既有的 QR token 路徑，
+ * 不需要改資料庫或 RPC。權限一律在伺服器端判定，前端傳什麼都不影響。
  */
 export async function enterGym(
   gymId: string,
   playerId: string,
-  lat: number,
-  lng: number
+  lat: number | null,
+  lng: number | null
 ): Promise<LadderResult> {
   const mine = await requireMyPlayer(playerId);
   if (mine.error) return { ok: false, error: mine.error };
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return { ok: false, error: "無法取得你的位置，請允許定位後再試一次" };
-  }
 
   const db = supabaseAdmin();
   const { data: gym } = await db
@@ -95,6 +140,16 @@ export async function enterGym(
     .eq("id", gymId)
     .maybeSingle<DbGymPublic>();
   if (!gym) return { ok: false, error: "找不到這座道館" };
+
+  if (await isAdmin(await getSession())) {
+    const bypass = await enterGymAsAdmin(db, gym, playerId);
+    if (bypass) return bypass;
+    // 取不到 token 就當作沒有這條路，繼續走一般的定位驗證
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false, error: "無法取得你的位置，請允許定位後再試一次" };
+  }
 
   const res = await ladderRpc(db, "ladder_enter_gym", {
     p_gym_id: gymId,
@@ -408,18 +463,24 @@ export type GymState = {
   roster: RosterEntry[];
   /** 我目前在場的選手 id → 進場到期時間 */
   myPresence: Array<{ playerId: string; expiresAt: string }>;
-  /** 進行中／待確認的對戰，供重整後回到現場 */
-  activeMatchId: string | null;
+  /** 進行中／待確認的對戰：被挑戰時自動進場，重整後也靠它回到現場 */
+  activeMatch: ActiveMatch | null;
 };
 
-/** 道館即時狀態（10 秒輪詢） */
-export async function getGymState(gymId: string): Promise<GymState> {
+/**
+ * 道館即時狀態（2 秒輪詢）。
+ *
+ * withMaintenance：逾時自動成立要在這裡補跑，否則只靠 /ladder 頁載入與每日 cron
+ * 會讓守台的人卡著。但自動成立的門檻是 1 分鐘，沒必要每 2 秒掃一次——
+ * 由呼叫端每隔約 30 秒帶一次 true 就夠了。
+ */
+export async function getGymState(
+  gymId: string,
+  withMaintenance = true
+): Promise<GymState> {
   const db = supabaseAdmin();
 
-  // 逾時自動成立在這裡也補跑一次：現場的人是盯著道館頁在等下一場，
-  // 只靠 /ladder 頁載入與每日 cron 會讓守台的人卡著。
-  // 查詢走 partial index、skip locked，成本很低。
-  await runLadderMaintenance(db);
+  if (withMaintenance) await runLadderMaintenance(db);
 
   const mine = await myPlayers();
   const myIds = new Set(mine.map((p) => p.id));
@@ -433,7 +494,12 @@ export async function getGymState(gymId: string): Promise<GymState> {
 
   const ids = (presence ?? []).map((p) => p.player_id);
   if (ids.length === 0) {
-    return { roster: [], myPresence: [], activeMatchId: null };
+    // 進場逾時但對戰還在跑的情況也要查得到，不能提早回傳 null
+    return {
+      roster: [],
+      myPresence: [],
+      activeMatch: await findActiveMatch(mine.map((p) => p.id)),
+    };
   }
 
   const season = await activeSeason(db);
@@ -484,7 +550,7 @@ export async function getGymState(gymId: string): Promise<GymState> {
     myPresence: (presence ?? [])
       .filter((p) => myIds.has(p.player_id))
       .map((p) => ({ playerId: p.player_id, expiresAt: p.expires_at })),
-    activeMatchId: await findActiveMatchId(mine.map((p) => p.id)),
+    activeMatch: await findActiveMatch(mine.map((p) => p.id)),
   };
 }
 
@@ -533,31 +599,82 @@ export async function getNextMatch(
   };
 }
 
-/** 我尚未結束的天梯對戰（重整後回到現場用） */
-export async function findActiveMatchId(
+export type ActiveMatch = {
+  matchId: string;
+  status: "playing" | "pending_confirm";
+  /** 我在這場的選手 id */
+  myPlayerId: string;
+  opponentNickname: string;
+  opponentAvatar: string;
+  /** true＝這場是對方向我發起的，我還沒看過任何畫面 */
+  challengedMe: boolean;
+};
+
+type LiveMatchRow = {
+  id: string;
+  status: "playing" | "pending_confirm";
+  player_a: string;
+  player_b: string;
+  created_at: string;
+};
+
+/**
+ * 「我現在該做什麼」：我尚未結束的天梯對戰，連對手資訊一起帶回。
+ *
+ * ladder_challenge 沒有「對方接受」這一步，比賽一建立就是 playing——
+ * 被挑戰的人不會收到任何詢問，所以要靠這支查詢把他推進計分板。
+ * 道館頁輪詢與重整後回到現場都走這裡。
+ */
+export async function findActiveMatch(
   playerIds: string[]
-): Promise<string | null> {
+): Promise<ActiveMatch | null> {
   if (playerIds.length === 0) return null;
   const db = supabaseAdmin();
   const live = ["playing", "pending_confirm"];
+  const cols = "id,status,player_a,player_b,created_at";
   const [{ data: asA }, { data: asB }] = await Promise.all([
     db
       .from("ladder_matches")
-      .select("id,created_at")
+      .select(cols)
       .in("status", live)
       .in("player_a", playerIds)
-      .returns<Array<{ id: string; created_at: string }>>(),
+      .returns<LiveMatchRow[]>(),
     db
       .from("ladder_matches")
-      .select("id,created_at")
+      .select(cols)
       .in("status", live)
       .in("player_b", playerIds)
-      .returns<Array<{ id: string; created_at: string }>>(),
+      .returns<LiveMatchRow[]>(),
   ]);
-  const all = [...(asA ?? []), ...(asB ?? [])].sort((x, y) =>
+  const match = [...(asA ?? []), ...(asB ?? [])].sort((x, y) =>
     x.created_at < y.created_at ? 1 : -1
-  );
-  return all[0]?.id ?? null;
+  )[0];
+  if (!match) return null;
+
+  // ladder_challenge 一律把發起方寫進 player_a，所以我是 player_b 就是被挑戰的一方
+  const iAmA = playerIds.includes(match.player_a);
+  const opponentId = iAmA ? match.player_b : match.player_a;
+  const { data: opponent } = await db
+    .from("players")
+    .select("nickname,avatar")
+    .eq("id", opponentId)
+    .maybeSingle<{ nickname: string; avatar: string }>();
+
+  return {
+    matchId: match.id,
+    status: match.status,
+    myPlayerId: iAmA ? match.player_a : match.player_b,
+    opponentNickname: opponent?.nickname ?? "對手",
+    opponentAvatar: opponent?.avatar ?? "🌀",
+    challengedMe: !iAmA,
+  };
+}
+
+/** 我尚未結束的天梯對戰 id（/ladder 頁的「回到對戰」入口用） */
+export async function findActiveMatchId(
+  playerIds: string[]
+): Promise<string | null> {
+  return (await findActiveMatch(playerIds))?.matchId ?? null;
 }
 
 export type MatchState = {
@@ -568,6 +685,8 @@ export type MatchState = {
   deltaA: number | null;
   deltaB: number | null;
   reportedBy: string | null;
+  /** 回報時間：勝方等待畫面的「還剩幾秒自動成立」倒數用 */
+  reportedAt: string | null;
   /** 結算後雙方最新積分 */
   ratingA: number | null;
   ratingB: number | null;
@@ -605,6 +724,7 @@ export async function getMatchState(matchId: string): Promise<MatchState | null>
     deltaA: m.delta_a,
     deltaB: m.delta_b,
     reportedBy: m.reported_by,
+    reportedAt: m.reported_at,
     ratingA,
     ratingB,
   };

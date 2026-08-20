@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>音訊診斷</title>
+<style>
+  body{background:#0b1026;color:#e6ecff;font-family:system-ui,"Noto Sans TC",sans-serif;
+       margin:0;padding:20px;line-height:1.7}
+  h1{font-size:19px;margin:0 0 4px}
+  p.sub{color:#8b96bb;font-size:13px;margin:0 0 18px}
+  .row{background:#141a36;border:1px solid #232b52;border-radius:10px;
+       padding:10px 12px;margin-bottom:8px;font-size:14px}
+  .k{color:#8b96bb;font-size:12px;display:block}
+  .v{font-family:ui-monospace,monospace;word-break:break-all}
+  .ok{color:#4ade80}.bad{color:#ff6b8a}.warn{color:#f5c542}
+  button{background:#38e0ff;color:#04060e;border:0;border-radius:10px;
+         padding:14px 16px;font-weight:800;font-size:15px;width:100%;margin-bottom:8px}
+  button.alt{background:#7c5cff;color:#fff}
+  button.ghost{background:transparent;color:#8b96bb;border:1px solid #232b52}
+  #log{white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12px;
+       background:#04060e;border:1px solid #232b52;border-radius:10px;padding:10px;
+       margin-top:14px;min-height:80px}
+</style>
+</head>
+<body>
+<h1>音訊診斷</h1>
+<p class="sub">把靜音撥桿<b>撥到靜音</b>，然後由上到下按一遍。每顆按鈕測不同的一層。</p>
+
+<div id="env"></div>
+
+<button id="b1">① 合成嗶聲（Web Audio，不用音檔）</button>
+<button id="b2" class="alt">② 倒數語音檔（Web Audio 解碼播放）</button>
+<button id="b3" class="ghost">③ &lt;audio&gt; 元素播同一個檔</button>
+<button id="b4" class="ghost">重設並重新檢查</button>
+
+<div id="log">（結果會出現在這裡）</div>
+
+<script>
+const SRC = "/countdown-321go.mp3";
+const logEl = document.getElementById("log");
+const envEl = document.getElementById("env");
+let AC = null, buf = null;
+
+function log(s){ logEl.textContent += s + "\n"; }
+function row(k,v,cls){ return `<div class="row"><span class="k">${k}</span>
+  <span class="v ${cls||""}">${v}</span></div>`; }
+
+/** 和 app 一樣：先宣告用途，再建立 context */
+function enableSession(){
+  try{
+    if (navigator.audioSession){ navigator.audioSession.type = "playback"; return "已設 playback"; }
+    return "此瀏覽器沒有 navigator.audioSession";
+  }catch(e){ return "設定失敗：" + e.message; }
+}
+function ctx(){
+  if (!AC){
+    const r = enableSession();
+    log("audioSession → " + r);
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    log("AudioContext 建立，state=" + AC.state);
+  }
+  return AC;
+}
+function unlock(ac){
+  if (ac.state === "suspended") ac.resume().then(()=>log("resume() 完成，state="+ac.state));
+  try{
+    const s = ac.createBufferSource();
+    s.buffer = ac.createBuffer(1,1,22050);
+    s.connect(ac.destination); s.start(0);
+    log("無聲 buffer 已播（解鎖用）");
+  }catch(e){ log("解鎖 buffer 失敗：" + e.message); }
+}
+
+function renderEnv(){
+  const ua = navigator.userAgent;
+  const m = ua.match(/OS (\d+)[._](\d+)/);
+  envEl.innerHTML =
+    row("瀏覽器", ua) +
+    row("iOS 版本", m ? m[1]+"."+m[2] : "非 iOS 或讀不到",
+        m && Number(m[1]) < 16 ? "bad" : "") +
+    row("navigator.audioSession",
+        ("audioSession" in navigator) ? "支援" : "不支援（無法蓋過靜音撥桿）",
+        ("audioSession" in navigator) ? "ok" : "bad") +
+    row("目前 audioSession.type",
+        (navigator.audioSession && navigator.audioSession.type) || "—") +
+    row("AudioContext state", AC ? AC.state : "尚未建立");
+}
+
+document.getElementById("b1").onclick = () => {
+  logEl.textContent = "";
+  const ac = ctx(); unlock(ac);
+  try{
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type="square"; o.frequency.value=880;
+    o.connect(g); g.connect(ac.destination);
+    const t = ac.currentTime;
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.5);
+    o.start(t); o.stop(t+0.5);
+    log("✅ 已排程嗶聲 0.5 秒；state=" + ac.state);
+    log("→ 有聽到嗎？");
+  }catch(e){ log("❌ 失敗：" + e.message); }
+  renderEnv();
+};
+
+document.getElementById("b2").onclick = async () => {
+  logEl.textContent = "";
+  const ac = ctx(); unlock(ac);
+  try{
+    if (!buf){
+      const res = await fetch(SRC);
+      log("fetch " + SRC + " → HTTP " + res.status);
+      if(!res.ok){ log("❌ 音檔抓不到，這就是原因"); renderEnv(); return; }
+      const ab = await res.arrayBuffer();
+      log("下載 " + ab.byteLength + " bytes");
+      buf = await ac.decodeAudioData(ab);
+      log("解碼成功：" + buf.duration.toFixed(3) + " 秒 / " + buf.sampleRate + " Hz");
+    }
+    const s = ac.createBufferSource();
+    s.buffer = buf; s.connect(ac.destination);
+    s.start(0, 0.14, 3.06);
+    log("✅ 已開始播放語音（跳過開頭 140ms，播 3.06 秒）");
+    log("→ 有聽到 Three Two One Go 嗎？");
+  }catch(e){ log("❌ 失敗：" + e.message); }
+  renderEnv();
+};
+
+document.getElementById("b3").onclick = () => {
+  logEl.textContent = "";
+  const a = new Audio(SRC);
+  a.play().then(()=>log("✅ <audio> 開始播放（這條在靜音撥桿開時通常不會有聲音）"))
+          .catch(e=>log("❌ <audio> 失敗：" + e.message));
+};
+
+document.getElementById("b4").onclick = () => {
+  if (AC) AC.close();
+  AC = null; buf = null; logEl.textContent = "已重設"; renderEnv();
+};
+
+renderEnv();
+</script>
+</body>
+</html>

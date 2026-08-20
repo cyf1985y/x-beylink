@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { DbGymPublic, activeSeason, runLadderMaintenance } from "@/lib/ladder";
+import { isAdmin } from "@/lib/admin";
 import { GymArena } from "@/components/GymArena";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function GymPage({ params }: { params: { id: string } }) {
     .maybeSingle<DbGymPublic>();
   if (!gym || !gym.active) notFound();
 
-  const [season, { data: players }] = await Promise.all([
+  const [season, { data: players }, admin] = await Promise.all([
     activeSeason(db),
     db
       .from("players")
@@ -29,6 +30,7 @@ export default async function GymPage({ params }: { params: { id: string } }) {
       .eq("user_id", session.uid)
       .order("created_at", { ascending: true })
       .returns<DbPlayer[]>(),
+    isAdmin(session),
   ]);
 
   const myPlayers = (players ?? []).map((p) => ({
@@ -75,6 +77,7 @@ export default async function GymPage({ params }: { params: { id: string } }) {
           <GymArena
             gym={{ id: gym.id, name: gym.name, radiusM: gym.radius_m }}
             myPlayers={myPlayers}
+            isAdmin={admin}
           />
         )}
       </div>
