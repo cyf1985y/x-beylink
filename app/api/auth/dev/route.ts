@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(`dev login 失敗：${error?.message}`, { status: 500 });
   }
   await createSessionCookie({ uid: data.id, name: data.display_name ?? as });
-  return NextResponse.redirect(`${baseUrl()}/me`);
+  return NextResponse.redirect(`${baseUrl()}/`);
 }
 
 function devLoginAllowed(token: string | null): boolean {
