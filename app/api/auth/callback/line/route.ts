@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
     await createSessionCookie({ uid: data.id, name: profile.displayName });
 
     // 登入後導回原本要去的頁（已在 state 內驗證過只收站內路徑）
-    return NextResponse.redirect(`${baseUrl()}${verified.state.next ?? "/me"}`);
+    // 沒指定 next 就回首頁。首頁有「選手檔案」入口磚，還沒建檔的人不會迷路；
+    // 直接丟到 /me 會讓已經建好檔的老使用者每次登入都先看到一頁跟他無關的表單。
+    return NextResponse.redirect(`${baseUrl()}${verified.state.next ?? "/"}`);
   } catch (e) {
     console.error("LINE 登入失敗：", e);
     return loginFail("登入過程發生錯誤，請重試");

@@ -54,6 +54,8 @@ export type DbLadderMatch = {
   reported_by: string | null;
   reported_at: string | null;
   confirmed_at: string | null;
+  /** 最近一次按下開場倒數的時間；兩支手機用它對齊倒數音檔的播放位置 */
+  round_started_at: string | null;
   created_at: string;
 };
 

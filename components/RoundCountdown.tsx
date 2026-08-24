@@ -54,19 +54,42 @@ const LAST = BEATS.length - 1;
  * 畫面用 BEAT_OFFSETS 的時間戳對齊音檔，不逐拍重算。
  * 倒數中點畫面任意處即可取消（誤觸不用等它跑完）。
  */
+/** 整段倒數的長度：最後一拍的位移再加上收畫面的停留 */
+const TOTAL_MS = BEAT_OFFSETS[BEATS.length - 1] + TAIL_MS;
+
 export function RoundCountdown({
   className,
   label = "▶ 開始回合",
   disabled,
+  startedAt = null,
+  elapsedMs = 0,
+  onStart,
 }: {
   className?: string;
   label?: string;
   disabled?: boolean;
+  /**
+   * 對方按下開場倒數的時間戳（伺服器時鐘）。
+   * 不傳就是單機模式——主辦方計分板與大螢幕都不需要同步。
+   */
+  startedAt?: string | null;
+  /**
+   * 從 startedAt 到現在經過了多久（毫秒），由呼叫端用
+   * 「serverNow − roundStartedAt」算好傳進來。客戶端時鐘不參與，
+   * 否則兩支手機差幾秒就對不上這段只有 3.8 秒的音檔。
+   */
+  elapsedMs?: number;
+  /** 按下時通知呼叫端去寫時間戳，好讓對方也跟著倒數 */
+  onStart?: () => void;
 }) {
   // 0、1、2、3（GO）→ null（結束回到計分畫面）
   const [step, setStep] = useState<number | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const stopAudio = useRef<(() => void) | null>(null);
+  /** 已經處理過的開場時間戳，避免每次輪詢都重播同一段 */
+  const handled = useRef<string | null>(null);
+  /** 自己按下之後的這段期間，輪詢回來的時間戳是自己的回聲，要忽略 */
+  const selfStartedUntil = useRef(0);
 
   /** 收掉所有排程與聲音（取消、播完、離開畫面都走這裡） */
   const clearAll = useCallback(() => {
@@ -88,13 +111,23 @@ export function RoundCountdown({
     setStep(null);
   }, [clearAll]);
 
-  const start = () => {
+  /**
+   * 從整段倒數的第 fromMs 毫秒接著跑。
+   *
+   * 自己按的人 fromMs 是 0；對方是輪詢後才知道，所以會從中間插進來——
+   * 聲音用 offset 起播、畫面直接跳到對應的那一拍，這樣兩邊的「GO!」才會同時到。
+   */
+  const run = useCallback((fromMs: number) => {
     clearAll();
     enableAudioSession();
     unlockAudio();
 
-    // 有語音就播語音（跳過開頭靜音），沒有就每拍補一顆合成音
-    stopAudio.current = playCountdown(LEAD_SILENCE_MS / 1000, PLAY_MS / 1000);
+    // 有語音就播語音（跳過開頭靜音、再往後推已經過掉的部分），
+    // 沒有就每拍補一顆合成音
+    stopAudio.current = playCountdown(
+      (LEAD_SILENCE_MS + fromMs) / 1000,
+      PLAY_MS / 1000
+    );
     const useBeeps = !stopAudio.current;
 
     const mark = (i: number) => {
@@ -103,16 +136,51 @@ export function RoundCountdown({
       if (useBeeps) (i === LAST ? beepGo : beepCount)();
     };
 
-    mark(0);
-    for (let i = 1; i <= LAST; i++) {
-      timers.current.push(setTimeout(() => mark(i), BEAT_OFFSETS[i]));
+    // 已經過掉的拍子不補嗶聲也不震動（那是過去式），只把畫面停在最後一拍上
+    let current = 0;
+    for (let i = 0; i <= LAST; i++) {
+      const delay = BEAT_OFFSETS[i] - fromMs;
+      if (delay <= 0) {
+        current = i;
+        continue;
+      }
+      timers.current.push(setTimeout(() => mark(i), delay));
     }
+    if (fromMs <= 0) mark(0);
+    else setStep(current);
+
     // 收畫面，但不停聲音——「GO！」這個字通常比 TAIL_MS 長，硬停會把它切掉。
     // 真的要停（取消、離開畫面、再按一次）都會走 clearAll。
     timers.current.push(
-      setTimeout(() => setStep(null), BEAT_OFFSETS[LAST] + TAIL_MS)
+      setTimeout(() => setStep(null), Math.max(0, TOTAL_MS - fromMs))
     );
+  }, [clearAll]);
+
+  /** 我自己按的：立刻從頭播，不等伺服器來回，同時通知呼叫端寫時間戳 */
+  const start = () => {
+    // 自己按下的那一刻起算一整段：這段期間輪詢回來的時間戳就是我自己剛觸發的，
+    // 不擋掉的話 2 秒後會再重播一次。
+    selfStartedUntil.current = Date.now() + TOTAL_MS;
+    run(0);
+    onStart?.();
   };
+
+  /**
+   * 對方按了開始回合：輪詢拿到新的時間戳就跟著跑。
+   *
+   * 三種要跳過的情況：
+   * 1. 這個時間戳處理過了——輪詢每 2 秒回來一次，不擋會一直重播
+   * 2. 是我自己剛按的回聲
+   * 3. 已經播完了（elapsedMs 超過整段長度）——例如中途才打開這一頁，
+   *    不該突然冒出一段早就結束的倒數
+   */
+  useEffect(() => {
+    if (!startedAt || handled.current === startedAt) return;
+    handled.current = startedAt;
+    if (Date.now() < selfStartedUntil.current) return;
+    if (elapsedMs >= TOTAL_MS) return;
+    run(Math.max(0, elapsedMs));
+  }, [startedAt, elapsedMs, run]);
 
   const running = step !== null;
 
