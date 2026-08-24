@@ -202,6 +202,34 @@ export async function challenge(
   return { ok: true, matchId: res.new_match_id ?? undefined };
 }
 
+/**
+ * 按下「開始回合」：把開場時間戳寫進這場比賽，讓對方的裝置也一起倒數。
+ *
+ * 天梯沒有裁判，兩個小孩各拿一支手機。原本倒數是純本機的，兩邊各按各的，
+ * 兩個聲音會岔開。寫一個共用的時間戳，對方輪詢拿到之後用時間差當音檔的
+ * 起播位置，聲音就對得上。
+ *
+ * 時間用 Node 的 new Date() 而不是資料庫的 now()：讀取時回傳的 serverNow
+ * 也是 Node 的時間，兩者同一個時鐘源相減才乾淨，混用會多一層無謂的偏差。
+ */
+export async function startRound(
+  matchId: string,
+  playerId: string
+): Promise<{ ok: boolean; error?: string }> {
+  // 「這場的選手本人，且對戰還在進行中」——正是開場倒數該有的條件
+  const guard = await requireLadderScorer(matchId, playerId);
+  if (guard.error) return { ok: false, error: guard.error };
+
+  const db = supabaseAdmin();
+  const { error } = await db
+    .from("ladder_matches")
+    .update({ round_started_at: new Date().toISOString() })
+    .eq("id", matchId);
+  if (error) return { ok: false, error: "開場訊號送出失敗" };
+
+  return { ok: true };
+}
+
 /* --------------------------------- 逐回合計分 ------------------------------- */
 
 export type LadderRoundsResult = {
@@ -697,6 +725,16 @@ export type MatchState = {
   reportedBy: string | null;
   /** 回報時間：勝方等待畫面的「還剩幾秒自動成立」倒數用 */
   reportedAt: string | null;
+  /** 最近一次按下開場倒數的時間（伺服器時鐘） */
+  roundStartedAt: string | null;
+  /**
+   * 回應當下的伺服器時間。
+   *
+   * 開場倒數要兩支手機對齊，而倒數音檔全長只有 3.8 秒——兩支手機的系統時間
+   * 差個幾秒就會完全對不上。所以經過時間一律用「serverNow − roundStartedAt」
+   * 算，兩個值都出自伺服器的同一個時鐘，客戶端時間完全不參與。
+   */
+  serverNow: string;
   /** 結算後雙方最新積分 */
   ratingA: number | null;
   ratingB: number | null;
@@ -735,6 +773,8 @@ export async function getMatchState(matchId: string): Promise<MatchState | null>
     deltaB: m.delta_b,
     reportedBy: m.reported_by,
     reportedAt: m.reported_at,
+    roundStartedAt: m.round_started_at,
+    serverNow: new Date().toISOString(),
     ratingA,
     ratingB,
   };

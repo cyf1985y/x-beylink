@@ -14,6 +14,7 @@ import {
   getMatchState,
   getNextMatch,
   reportResult,
+  startRound,
   undoLadderRound,
   type LadderRoundsResult,
   type MatchState,
@@ -100,6 +101,17 @@ export function LadderMatchPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  /**
+   * 開場倒數已經過了多久。
+   *
+   * 一律用伺服器的兩個時間相減，客戶端時鐘完全不參與——手機的系統時間
+   * 差個幾秒，就足以毀掉這段只有 3.8 秒的音檔對齊。
+   */
+  const roundElapsedMs = state.roundStartedAt
+    ? new Date(state.serverNow).getTime() -
+      new Date(state.roundStartedAt).getTime()
+    : 0;
 
   const [next, setNext] = useState<NextMatch | null>(null);
 
@@ -488,7 +500,14 @@ export function LadderMatchPanel({
 
           {/* 天梯沒有裁判，這顆按鈕就是裁判 */}
           <div className="mt-3">
-            <RoundCountdown disabled={busy || decided} />
+            <RoundCountdown
+              disabled={busy || decided}
+              startedAt={state.roundStartedAt}
+              elapsedMs={roundElapsedMs}
+              onStart={() => {
+                if (myPlayerId) startRound(matchId, myPlayerId);
+              }}
+            />
             <p className="mt-1.5 text-center text-[11px] text-slate-500">
               按下會全螢幕倒數 3、2、1、GO SHOOT（有聲音）
             </p>
