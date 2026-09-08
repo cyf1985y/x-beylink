@@ -201,3 +201,112 @@ export async function rejectApplication(
   revalidatePath("/admin");
   return { ok: true };
 }
+
+/* --------------------------------- 天梯道館 --------------------------------- */
+
+/**
+ * 新增道館。
+ *
+ * 道館原本只能直接在資料庫建，沒有任何介面——「多道館系統」要能落地，
+ * 至少得讓平台管理員把地址與圖片填進去。店家自助編輯留到之後的階段
+ * （gyms.organizer_id 已經存在，權限模型是現成的）。
+ */
+export async function createGym(
+  _prev: AdminResult,
+  formData: FormData
+): Promise<AdminResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
+
+  const fields = gymFields(formData);
+  if ("error" in fields) return { ok: false, error: fields.error };
+
+  const db = supabaseAdmin();
+  const { error } = await db.from("gyms").insert(fields.values);
+  if (error) return { ok: false, error: "建立失敗，請稍後再試" };
+
+  revalidatePath("/admin");
+  revalidatePath("/ladder");
+  return { ok: true };
+}
+
+/** 編輯道館資料 */
+export async function updateGym(
+  _prev: AdminResult,
+  formData: FormData
+): Promise<AdminResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
+
+  const gymId = String(formData.get("gym_id") ?? "");
+  if (!gymId) return { ok: false, error: "缺少道館 id" };
+
+  const fields = gymFields(formData);
+  if ("error" in fields) return { ok: false, error: fields.error };
+
+  const db = supabaseAdmin();
+  const { error } = await db
+    .from("gyms")
+    .update(fields.values)
+    .eq("id", gymId);
+  if (error) return { ok: false, error: "更新失敗，請稍後再試" };
+
+  revalidatePath("/admin");
+  revalidatePath(`/ladder/gym/${gymId}`);
+  revalidatePath("/ladder");
+  return { ok: true };
+}
+
+type GymValues = {
+  name: string;
+  address: string | null;
+  logo_url: string | null;
+  lat: number;
+  lng: number;
+  radius_m: number;
+  certified: boolean;
+  active: boolean;
+};
+
+/** 表單欄位驗證。qr_token 不在這裡處理——那是進場憑證，不該由表單經手 */
+function gymFields(
+  formData: FormData
+): { values: GymValues } | { error: string } {
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length < 2 || name.length > 30) {
+    return { error: "道館名稱請填 2–30 字" };
+  }
+
+  const lat = Number(formData.get("lat"));
+  const lng = Number(formData.get("lng"));
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+    return { error: "緯度要在 -90 到 90 之間" };
+  }
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+    return { error: "經度要在 -180 到 180 之間" };
+  }
+
+  const radius = Number(formData.get("radius_m"));
+  if (!Number.isFinite(radius) || radius < 20 || radius > 2000) {
+    return { error: "進場範圍請填 20–2000 公尺" };
+  }
+
+  const logo = String(formData.get("logo_url") ?? "").trim();
+  // 只收 http(s)：javascript: 之類的協定會變成點擊即執行的破口
+  if (logo && !/^https?:\/\//i.test(logo)) {
+    return { error: "圖片網址請用 http:// 或 https:// 開頭" };
+  }
+
+  return {
+    values: {
+      name,
+      address: String(formData.get("address") ?? "").trim() || null,
+      logo_url: logo || null,
+      lat,
+      lng,
+      radius_m: Math.round(radius),
+      certified: formData.get("certified") === "on",
+      active: formData.get("active") === "on",
+    },
+  };
+}

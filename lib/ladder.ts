@@ -29,6 +29,10 @@ export type DbGymPublic = {
   certified: boolean;
   active: boolean;
   created_at: string;
+  /** 道館地址；道館頁提供 Google Maps 導航連結 */
+  address: string | null;
+  /** 道館 LOGO／照片的外部網址（此階段不做上傳） */
+  logo_url: string | null;
 };
 
 export type LadderMatchStatus =

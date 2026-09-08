@@ -9,6 +9,9 @@ import {
   CreateOrganizerForm,
   EditOrganizerForm,
   ApplicationCard,
+  CreateGymForm,
+  EditGymForm,
+  type GymRow,
 } from "@/components/AdminPanels";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +21,13 @@ export default async function AdminPage() {
   if (!(await isAdmin(session))) notFound();
 
   const db = supabaseAdmin();
+
+  const { data: gyms } = await db
+    .from("gyms")
+    .select("id,name,address,logo_url,lat,lng,radius_m,certified,active")
+    .order("active", { ascending: false })
+    .order("name")
+    .returns<GymRow[]>();
   const [
     { data: users },
     { data: organizers },
@@ -122,6 +132,19 @@ export default async function AdminPage() {
             </div>
           );
         })}
+      </section>
+
+      {/*
+        天梯道館。刻意讀基礎表而不是 gyms_public——後台要看得到已停用的道館，
+        而那個 view 只回傳 active 的。欄位逐一列出，不用 select *，
+        才不會把 qr_token（免定位進場的憑證）帶到瀏覽器。
+      */}
+      <section className="mt-8 space-y-3">
+        <h2 className="h-x">天梯道館</h2>
+        <CreateGymForm />
+        {(gyms ?? []).map((g) => (
+          <EditGymForm key={g.id} gym={g} />
+        ))}
       </section>
     </main>
   );

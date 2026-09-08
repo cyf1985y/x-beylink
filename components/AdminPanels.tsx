@@ -6,6 +6,8 @@ import {
   updateOrganizer,
   approveApplication,
   rejectApplication,
+  createGym,
+  updateGym,
   type AdminResult,
 } from "@/app/admin/actions";
 import { TIERS, Tier } from "@/lib/events";
@@ -183,5 +185,129 @@ export function ApplicationCard({
       </form>
       <Msg state={rejectState} />
     </div>
+  );
+}
+
+/* --------------------------------- 天梯道館 --------------------------------- */
+
+export type GymRow = {
+  id: string;
+  name: string;
+  address: string | null;
+  logo_url: string | null;
+  lat: number;
+  lng: number;
+  radius_m: number;
+  certified: boolean;
+  active: boolean;
+};
+
+const field =
+  "w-full rounded-lg border border-arena-line bg-arena px-2.5 py-1.5 text-sm";
+
+/**
+ * 道館欄位（新增與編輯共用）。
+ *
+ * 刻意不放 qr_token：那是免定位進場的憑證，只能留在伺服器端，
+ * 不該出現在任何表單或回傳給瀏覽器的資料裡。
+ */
+function GymFields({ gym }: { gym?: GymRow }) {
+  return (
+    <div className="mt-2 space-y-2">
+      <input
+        name="name"
+        defaultValue={gym?.name}
+        placeholder="道館名稱"
+        required
+        className={field}
+      />
+      <input
+        name="address"
+        defaultValue={gym?.address ?? ""}
+        placeholder="地址（玩家可點開 Google Maps 導航）"
+        className={field}
+      />
+      <input
+        name="logo_url"
+        defaultValue={gym?.logo_url ?? ""}
+        placeholder="圖片網址 https://…"
+        className={field}
+      />
+      <div className="flex gap-2">
+        <input
+          name="lat"
+          defaultValue={gym?.lat}
+          placeholder="緯度"
+          required
+          className={field}
+        />
+        <input
+          name="lng"
+          defaultValue={gym?.lng}
+          placeholder="經度"
+          required
+          className={field}
+        />
+        <input
+          name="radius_m"
+          defaultValue={gym?.radius_m ?? 150}
+          placeholder="範圍(m)"
+          required
+          className={field}
+        />
+      </div>
+      <div className="flex gap-4 text-sm text-slate-300">
+        <label className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            name="certified"
+            defaultChecked={gym?.certified ?? false}
+          />
+          認證道館
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            name="active"
+            defaultChecked={gym?.active ?? true}
+          />
+          啟用中
+        </label>
+      </div>
+    </div>
+  );
+}
+
+export function CreateGymForm() {
+  const [state, formAction] = useFormState(createGym, initialState);
+  return (
+    <form action={formAction} className="rounded-xl border border-dashed border-arena-line p-3">
+      <p className="text-sm font-bold text-slate-300">➕ 新增道館</p>
+      <GymFields />
+      <div className="mt-2 flex items-center justify-between">
+        <Msg state={state} />
+        <Submit label="建立" />
+      </div>
+    </form>
+  );
+}
+
+export function EditGymForm({ gym }: { gym: GymRow }) {
+  const [state, formAction] = useFormState(updateGym, initialState);
+  return (
+    <form action={formAction} className="rounded-xl border border-arena-line p-3">
+      <input type="hidden" name="gym_id" value={gym.id} />
+      <p className="text-sm font-bold">
+        🏟️ {gym.name}
+        {!gym.active && (
+          <span className="ml-2 text-xs font-normal text-slate-500">（已停用）</span>
+        )}
+      </p>
+      <GymFields gym={gym} />
+      <div className="mt-2 flex items-center justify-between">
+        <Msg state={state} />
+        <Submit label="儲存" />
+      </div>
+    </form>
   );
 }

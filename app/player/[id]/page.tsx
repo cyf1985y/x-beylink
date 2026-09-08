@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin, DbPlayer } from "@/lib/supabase";
 import { TIERS, Tier, formatTaipei, isTier } from "@/lib/events";
 import { careerFinishStats } from "@/lib/rounds";
+import { getPlayerBadges, syncGymBadges } from "@/lib/gymStats";
+import { BadgeShelf } from "@/components/BadgeShelf";
 import {
   BASE_RATING,
   CLASS_LABEL,
@@ -41,6 +43,10 @@ export default async function PlayerPage({
     .eq("id", params.id)
     .single<DbPlayer>();
   if (!player) notFound();
+
+  // 先補發應得的道館徽章再讀，這樣剛達成的當下就看得到（冪等，不會重複發）
+  await syncGymBadges(db, player.id);
+  const badges = await getPlayerBadges(db, player.id);
 
   const { data: trophies } = await db
     .from("trophies")
@@ -209,6 +215,13 @@ export default async function PlayerPage({
           </div>
         </section>
       )}
+
+      <section className="mt-6">
+        <h2 className="h-x text-gold">道館徽章</h2>
+        <div className="mt-3">
+          <BadgeShelf badges={badges} />
+        </div>
+      </section>
 
       <section className="mt-6">
         <h2 className="h-x text-gold">獎盃牆</h2>
