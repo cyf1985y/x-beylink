@@ -1,0 +1,15 @@
+{
+  "name": "陀螺集結 自動裁判",
+  "short_name": "自動裁判",
+  "description": "BEYBLADE X 對戰自動判定：手機架在戰鬥盤上方，本機即時判定終結方式與得分",
+  "start_url": "/autoref/battle",
+  "scope": "/autoref/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1026",
+  "theme_color": "#0b1026",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "/autoref/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
