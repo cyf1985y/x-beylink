@@ -1,0 +1,42 @@
+[
+  {
+    "id": "spin_local_60fps",
+    "range": "00:45–01:10",
+    "call_time": "00:46.10",
+    "predicted": "轉停終結：判 B（當時為藍心陀螺）輸",
+    "observed": "判定當下兩顆仍在旋轉；約 01:07 紫紅色陀螺側倒，藍心仍旋轉。",
+    "conclusion": "過早結算，而且當時判輸的實體陀螺與最終結果相反。",
+    "cause": "自轉量測錯把旋轉中的影像判為低角度；45.80 秒量得 1.292°、peak 0.951、diff 13.664，因低於 spinOffDeg=3° 而標成停止。",
+    "link_time": 45
+  },
+  {
+    "id": "shark_local_60fps",
+    "range": "10:10–10:33",
+    "call_time": "10:10.50",
+    "predicted": "NO_CALL：hand_before_call",
+    "observed": "當下沒有手或發射器進盤，兩顆仍在運動。",
+    "conclusion": "影片標題條被誤認為手，直接中止判定。",
+    "cause": "上下標題條成為大型前景元件，handArea=17,926；此校正的手部門檻為 1,698×5=8,490。計算未把盤外標題排除。",
+    "link_time": 610
+  },
+  {
+    "id": "return_local_60fps",
+    "range": "18:46–19:07",
+    "call_time": "18:46.72",
+    "predicted": "轉停終結：判 A 輸，高信心",
+    "observed": "當下兩顆仍在旋轉；18:48 附近藍心到右側出口附近後回盤，對局繼續。",
+    "conclusion": "在回盤事件之前便已錯誤結算。",
+    "cause": "A 曾被標為停止，隨後連續 7 格失去追蹤；判定格 visible=false、spin=null，停轉計時卻仍達門檻並確認。",
+    "link_time": 1126
+  },
+  {
+    "id": "contact_local_60fps",
+    "range": "21:24–21:33",
+    "call_time": "21:24.92",
+    "predicted": "轉停終結：判 B 輸，高信心",
+    "observed": "前後畫面顯示紅心與藍心仍繼續旋轉、移動及碰撞。",
+    "conclusion": "碰撞片段提早判停轉，未可靠完成對局。",
+    "cause": "判定格 B 的自轉量測為 null，但沿用 spinning=false；缺少當下有效的停止觀測仍完成計時。",
+    "link_time": 1284
+  }
+]

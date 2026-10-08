@@ -1,0 +1,7 @@
+# Inputs and new experiments stay local; committed baseline evidence is preserved.
+/data/
+/runs/
+/rendered/
+/calibration-new/
+__pycache__/
+*.pyc

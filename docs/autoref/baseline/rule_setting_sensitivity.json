@@ -1,0 +1,282 @@
+[
+  {
+    "id": "spin_local_60fps",
+    "spinStopConfirmSec": 0.15,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 45.8,
+      "t_called": 46.1,
+      "flags": [
+        "reverse_x2",
+        "confirm_spin"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "spin_local_60fps",
+    "spinStopConfirmSec": 0.3,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 45.8,
+      "t_called": 46.1,
+      "flags": [
+        "reverse_x2",
+        "confirm_spin"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "spin_local_60fps",
+    "spinStopConfirmSec": 0.5,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 47.71666666666667,
+      "t_called": 48.21666666666667,
+      "flags": [
+        "reverse_x3",
+        "confirm_spin"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "spin_local_60fps",
+    "spinStopConfirmSec": 1,
+    "firstCall": {
+      "battle": 1,
+      "result": "NO_CALL",
+      "points": 0,
+      "winner": null,
+      "t_event": null,
+      "t_called": 50.25,
+      "flags": [
+        "reverse_x3",
+        "hand_before_call"
+      ],
+      "confidence": "low",
+      "loser_bey": null
+    }
+  },
+  {
+    "id": "shark_local_60fps",
+    "spinStopConfirmSec": 0.15,
+    "firstCall": {
+      "battle": 1,
+      "result": "NO_CALL",
+      "points": 0,
+      "winner": null,
+      "t_event": null,
+      "t_called": 610.5,
+      "flags": [
+        "hand_before_call"
+      ],
+      "confidence": "low",
+      "loser_bey": null
+    }
+  },
+  {
+    "id": "shark_local_60fps",
+    "spinStopConfirmSec": 0.3,
+    "firstCall": {
+      "battle": 1,
+      "result": "NO_CALL",
+      "points": 0,
+      "winner": null,
+      "t_event": null,
+      "t_called": 610.5,
+      "flags": [
+        "hand_before_call"
+      ],
+      "confidence": "low",
+      "loser_bey": null
+    }
+  },
+  {
+    "id": "shark_local_60fps",
+    "spinStopConfirmSec": 0.5,
+    "firstCall": {
+      "battle": 1,
+      "result": "NO_CALL",
+      "points": 0,
+      "winner": null,
+      "t_event": null,
+      "t_called": 610.5,
+      "flags": [
+        "hand_before_call"
+      ],
+      "confidence": "low",
+      "loser_bey": null
+    }
+  },
+  {
+    "id": "shark_local_60fps",
+    "spinStopConfirmSec": 1,
+    "firstCall": {
+      "battle": 1,
+      "result": "NO_CALL",
+      "points": 0,
+      "winner": null,
+      "t_event": null,
+      "t_called": 610.5,
+      "flags": [
+        "hand_before_call"
+      ],
+      "confidence": "low",
+      "loser_bey": null
+    }
+  },
+  {
+    "id": "return_local_60fps",
+    "spinStopConfirmSec": 0.15,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P2",
+      "t_event": 1126.5666666666666,
+      "t_called": 1126.7166666666667,
+      "flags": [
+        "confirm_spin"
+      ],
+      "confidence": "high",
+      "loser_bey": "A"
+    }
+  },
+  {
+    "id": "return_local_60fps",
+    "spinStopConfirmSec": 0.3,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1126.6833333333334,
+      "t_called": 1127,
+      "flags": [
+        "confirm_spin"
+      ],
+      "confidence": "high",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "return_local_60fps",
+    "spinStopConfirmSec": 0.5,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1128.7666666666667,
+      "t_called": 1128.8666666666666,
+      "flags": [
+        "reverse_x2",
+        "hand_early"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "return_local_60fps",
+    "spinStopConfirmSec": 1,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1128.7666666666667,
+      "t_called": 1128.8666666666666,
+      "flags": [
+        "reverse_x2",
+        "hand_early"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "contact_local_60fps",
+    "spinStopConfirmSec": 0.15,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1284.7666666666667,
+      "t_called": 1284.9166666666667,
+      "flags": [
+        "confirm_spin"
+      ],
+      "confidence": "high",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "contact_local_60fps",
+    "spinStopConfirmSec": 0.3,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1284.7666666666667,
+      "t_called": 1285.0833333333333,
+      "flags": [
+        "confirm_spin"
+      ],
+      "confidence": "high",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "contact_local_60fps",
+    "spinStopConfirmSec": 0.5,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1285.9833333333333,
+      "t_called": 1286.6166666666666,
+      "flags": [
+        "reverse_x1",
+        "confirm_spin"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  },
+  {
+    "id": "contact_local_60fps",
+    "spinStopConfirmSec": 1,
+    "firstCall": {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P1",
+      "t_event": 1287.3833333333334,
+      "t_called": 1287.4333333333334,
+      "flags": [
+        "reverse_x1",
+        "hand_early"
+      ],
+      "confidence": "medium",
+      "loser_bey": "B"
+    }
+  }
+]

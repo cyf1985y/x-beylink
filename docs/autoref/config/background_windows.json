@@ -1,0 +1,37 @@
+[
+  {
+    "name": "initial",
+    "start": 25,
+    "duration": 10,
+    "sample_fps": 4,
+    "size": 480
+  },
+  {
+    "name": "spin",
+    "start": 45,
+    "duration": 5,
+    "sample_fps": 4,
+    "size": 480
+  },
+  {
+    "name": "shark",
+    "start": 610,
+    "duration": 5,
+    "sample_fps": 4,
+    "size": 480
+  },
+  {
+    "name": "return",
+    "start": 1126,
+    "duration": 3,
+    "sample_fps": 4,
+    "size": 480
+  },
+  {
+    "name": "contact",
+    "start": 1284,
+    "duration": 3,
+    "sample_fps": 4,
+    "size": 480
+  }
+]
