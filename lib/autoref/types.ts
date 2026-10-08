@@ -63,7 +63,8 @@ export interface BattleEvent {
     | "hand"
     | "out_of_frame"
     | "called"
-    | "manual";
+    | "manual"
+    | "stop_reset";
   bey?: BeyId;
   zone?: Zone;
   note?: string;
@@ -105,8 +106,10 @@ export interface RuleConfig {
   zoneVanishConfirmSec: number;
   /** 進區終結確認：留在區內超過此秒數 */
   zoneStayConfirmSec: number;
-  /** 轉停：自轉訊號低於門檻連續此秒數 */
+  /** 轉停：有效的「停止」觀測累計達此秒數才確認（看不到、量不到的格不計入） */
   spinStopConfirmSec: number;
+  /** 停止計時中，連續幾格沒有有效觀測（看不到、黏合、量不到）就歸零重來 */
+  spinStopMaxGapFrames: number;
   /** 盤外：從非口袋位置離開畫面且此秒數未回 */
   outOfFrameSec: number;
   /** 平手門檻（秒）；null = 一個畫格間隔 */
@@ -128,6 +131,7 @@ export const DEFAULT_RULE_CONFIG: RuleConfig = {
   zoneVanishConfirmSec: 1.5,
   zoneStayConfirmSec: 3,
   spinStopConfirmSec: 0.15,
+  spinStopMaxGapFrames: 2,
   outOfFrameSec: 1.5,
   drawToleranceSec: null,
   points: { XTREME_FINISH: 3, OVER_FINISH: 2, BURST_FINISH: 2, SPIN_FINISH: 1 },

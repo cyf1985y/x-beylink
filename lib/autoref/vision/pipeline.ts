@@ -8,6 +8,7 @@ import type { BeyId, BeyObs, FrameObs, Zone } from "../types.ts";
 import {
   buildZoneMap,
   ZONE_IN,
+  ZONE_NONE,
   ZONE_OVER,
   ZONE_XTREME,
   type Calibration,
@@ -27,6 +28,8 @@ export type BlobClass = "bey" | "merged" | "hand" | "discard";
 
 export interface ClassifiedBlob extends Blob {
   cls: BlobClass;
+  /** 落在區域圖（對戰區／極限區／出界區）內的像素數；手部判定只算這部分 */
+  inside: number;
 }
 
 export interface BeyTrack {
@@ -129,8 +132,12 @@ export class VisionProcessor {
   private calib: Calibration;
   private zoneMap: Uint8Array;
   private readonly gray: Uint8Array;
-  private prevGray: Uint8Array | null = null;
-  private readonly grayBuf: Uint8Array;
+  /** 灰階歷史環狀緩衝（長延遲比對用）；history[frameNo % H] 是第 frameNo 格 */
+  private history: Uint8Array[] = [];
+  /** 每顆陀螺在歷史各格的質心與有效旗標（可見且未黏合） */
+  private posHist: Record<BeyId, Float64Array> = { A: new Float64Array(0), B: new Float64Array(0) };
+  private posValid: Record<BeyId, Uint8Array> = { A: new Uint8Array(0), B: new Uint8Array(0) };
+  private frameNo = 0;
   private readonly mask: Uint8Array;
   private readonly tmpA: Uint8Array;
   private readonly tmpB: Uint8Array;
@@ -147,7 +154,7 @@ export class VisionProcessor {
     const n = this.width * this.height;
     this.zoneMap = buildZoneMap(calib.zones, this.width, this.height);
     this.gray = new Uint8Array(n);
-    this.grayBuf = new Uint8Array(n);
+    this.allocHistory();
     this.mask = new Uint8Array(n);
     this.tmpA = new Uint8Array(n);
     this.tmpB = new Uint8Array(n);
@@ -157,7 +164,22 @@ export class VisionProcessor {
   }
 
   setConfig(config: VisionConfig) {
+    const h = this.config.spin.historyFrames;
     this.config = config;
+    if (config.spin.historyFrames !== h) this.allocHistory();
+  }
+
+  private get historyLen(): number {
+    return Math.max(2, Math.floor(this.config.spin.historyFrames));
+  }
+
+  private allocHistory() {
+    const H = this.historyLen;
+    const n = this.width * this.height;
+    this.history = Array.from({ length: H }, () => new Uint8Array(n));
+    this.posHist = { A: new Float64Array(H * 2), B: new Float64Array(H * 2) };
+    this.posValid = { A: new Uint8Array(H), B: new Uint8Array(H) };
+    this.frameNo = 0;
   }
 
   setCalibration(calib: Calibration) {
@@ -168,10 +190,12 @@ export class VisionProcessor {
     this.zoneMap = buildZoneMap(calib.zones, this.width, this.height);
   }
 
-  /** 清掉追蹤身分（每局開始前） */
+  /** 清掉追蹤身分（每局開始前）；灰階歷史保留，但位置歷史作廢 */
   resetTracks() {
     this.tracks = { A: null, B: null };
     this.prevMerged = false;
+    this.posValid.A.fill(0);
+    this.posValid.B.fill(0);
   }
 
   get beyArea(): number {
@@ -204,9 +228,23 @@ export class VisionProcessor {
       } else if (aspect > c.maxAspect) cls = "discard";
       else if (b.area >= c.beyMinRatio * A && b.area <= c.beyMaxRatio * A) cls = "bey";
       else cls = "discard";
-      out.push({ ...b, cls });
+      out.push({ ...b, cls, inside: cls === "hand" ? this.insideZonePixels(b) : 0 });
     }
     return out;
+  }
+
+  /** 元件落在任一區域內的像素數。盤外的字幕、器材、人影不應被算成手。 */
+  private insideZonePixels(b: Blob): number {
+    const w = this.width;
+    let n = 0;
+    for (let y = b.bbox.y; y < b.bbox.y + b.bbox.h; y++) {
+      const row = y * w;
+      for (let x = b.bbox.x; x < b.bbox.x + b.bbox.w; x++) {
+        const i = row + x;
+        if (this.labels[i] === b.label && this.zoneMap[i] !== ZONE_NONE) n++;
+      }
+    }
+    return n;
   }
 
   private zoneRatios(b: Blob): { in: number; xtreme: number; over: number } {
@@ -317,8 +355,9 @@ export class VisionProcessor {
     const raw = connectedComponents(this.mask, w, h, this.labels, Math.floor(c.beyMinRatio * A * 0.5));
     const blobs = this.classify(raw);
 
+    // 手在盤內：只累計大型元件落在區域圖內的像素（規格 4.4 的面積法，但排除盤外干擾）
     let handArea = 0;
-    for (const b of blobs) if (b.cls === "hand") handArea += b.area;
+    for (const b of blobs) if (b.cls === "hand") handArea += b.inside;
     const hand = handArea >= c.handInsideRatio * A;
 
     // 候選陀螺
@@ -340,6 +379,9 @@ export class VisionProcessor {
     const mergedCand = cands.find((x) => x.merged);
     const assigned = mergedCand ? { A: mergedCand, B: mergedCand } : this.assign(cands, rgba);
 
+    const H = this.historyLen;
+    const prevGray = this.frameNo > 0 ? this.history[(this.frameNo - 1) % H] : null;
+    const L = Math.min(Math.max(1, Math.floor(c.spin.longLagFrames)), H - 1);
     const beys: BeyObs[] = [];
     let anyMerged = false;
     for (const id of ["A", "B"] as BeyId[]) {
@@ -359,27 +401,26 @@ export class VisionProcessor {
       const radius = cand.merged ? Math.sqrt(b.area / (2 * Math.PI)) : Math.sqrt(b.area / Math.PI);
       const ratios = this.zoneRatios(b);
       const zone = this.zoneOf(ratios, prev?.zone ?? "IN");
+      // 本格沒有新的量測（剛出現、黏合、前一格看不到）就是「未知」，不沿用舊狀態：
+      // 舊狀態會讓規則引擎在沒有觀測的期間繼續累計停轉計時（實測誤判的主因之一）
       let spin: SpinMeasure | null = null;
-      let spinning: boolean | null = prev?.spinning ?? null;
+      let spinning: boolean | null = null;
       if (cand.merged) {
         anyMerged = true;
-        spinning = null;
-      } else if (prev && prev.visible && this.prevGray && !prev.merged) {
-        const diff = maskedDiff(this.prevGray, this.gray, this.labels, b.label, b.bbox, w);
-        spin = measureSpin(
-          this.prevGray,
-          this.gray,
-          w,
-          h,
-          prev.cx,
-          prev.cy,
-          b.cx,
-          b.cy,
-          radius,
-          diff,
-          c.spin,
-          this.polarScratch
-        );
+      } else if (prev && prev.visible && prevGray && !prev.merged) {
+        const diff = maskedDiff(prevGray, this.gray, this.labels, b.label, b.bbox, w);
+        spin = measureSpin(prevGray, this.gray, w, h, prev.cx, prev.cy, b.cx, b.cy, radius, diff, c.spin, this.polarScratch);
+        // 長延遲比對：與 L 格之前（該格可見且未黏合）的影像再比一次
+        const slotL = this.frameNo - L;
+        if (slotL >= 0 && this.posValid[id][slotL % H]) {
+          const px = this.posHist[id][(slotL % H) * 2];
+          const py = this.posHist[id][(slotL % H) * 2 + 1];
+          const mL = measureSpin(this.history[slotL % H], this.gray, w, h, px, py, b.cx, b.cy, radius, diff, c.spin, this.polarScratch);
+          spin.longDeltaDeg = mL.deltaDeg;
+          spin.longLag = L;
+        } else {
+          spin.longDeltaDeg = null;
+        }
         spinning = decideSpinning(spin, prev.spinning, c.spin);
       }
       let hist = prev?.hist ?? null;
@@ -407,9 +448,19 @@ export class VisionProcessor {
     }
     this.prevMerged = anyMerged;
 
-    // 交換灰階緩衝
-    if (!this.prevGray) this.prevGray = this.grayBuf;
-    this.prevGray.set(this.gray);
+    // 寫入歷史：本格灰階與每顆陀螺的位置
+    const slot = this.frameNo % H;
+    this.history[slot].set(this.gray);
+    for (const id of ["A", "B"] as BeyId[]) {
+      const tr = this.tracks[id];
+      const valid = !!tr && tr.visible && !tr.merged;
+      this.posValid[id][slot] = valid ? 1 : 0;
+      if (valid && tr) {
+        this.posHist[id][slot * 2] = tr.cx;
+        this.posHist[id][slot * 2 + 1] = tr.cy;
+      }
+    }
+    this.frameNo += 1;
 
     const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
     return {

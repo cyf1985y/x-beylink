@@ -38,7 +38,8 @@ const GROUPS: { title: string; fields: Field[] }[] = [
       { path: ["rules", "zoneStopConfirmSec"], label: "進區後停止多久確認", step: 0.1 },
       { path: ["rules", "zoneVanishConfirmSec"], label: "進區後消失多久確認", step: 0.1 },
       { path: ["rules", "zoneStayConfirmSec"], label: "留在區內多久確認", step: 0.5 },
-      { path: ["rules", "spinStopConfirmSec"], label: "轉停：訊號低於門檻多久確認", step: 0.05 },
+      { path: ["rules", "spinStopConfirmSec"], label: "轉停：有效停止觀測累計多久確認", step: 0.05 },
+      { path: ["rules", "spinStopMaxGapFrames"], label: "轉停：觀測中斷幾格就歸零", step: 1 },
       { path: ["rules", "outOfFrameSec"], label: "非口袋出鏡多久判無法判定", step: 0.1 },
     ],
   },
@@ -78,6 +79,8 @@ const GROUPS: { title: string; fields: Field[] }[] = [
       { path: ["vision", "spin", "spinOffDeg"], label: "每格轉幾度以下視為停止", step: 0.5 },
       { path: ["vision", "spin", "minPeak"], label: "互相關峰值下限（量不到的門檻）", step: 0.05 },
       { path: ["vision", "spin", "diffHigh"], label: "簡單差值高於此值一律視為旋轉", step: 5 },
+      { path: ["vision", "spin", "longLagFrames"], label: "長延遲比對：隔幾格再比一次（破解混疊）", step: 1 },
+      { path: ["vision", "spin", "longStopDeg"], label: "長延遲角度差低於幾度才算停止", step: 0.5 },
     ],
   },
   {

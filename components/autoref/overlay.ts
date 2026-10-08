@@ -69,7 +69,9 @@ export function drawTracks(
     if (info?.suspectStop) tag += " 疑似停";
     if (t.merged) tag += " 黏合";
     if (debug && t.spin) {
-      tag += ` ${t.spin.deltaDeg === null ? "–" : t.spin.deltaDeg.toFixed(1) + "°"}/${t.spin.diff.toFixed(0)}`;
+      const l = t.spin.longDeltaDeg;
+      tag += ` ${t.spin.deltaDeg === null ? "–" : t.spin.deltaDeg.toFixed(1) + "°"}`;
+      tag += `/${l === null || l === undefined ? "–" : l.toFixed(1) + "°"}/${t.spin.diff.toFixed(0)}`;
     }
     ctx.font = "bold 13px sans-serif";
     const w = ctx.measureText(tag).width + 8;

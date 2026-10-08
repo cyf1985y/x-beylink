@@ -8,6 +8,9 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import { fileURLToPath } from "node:url";
 import { RefereeEngine } from "./rules.ts";
 import {
   addBattle,
@@ -463,5 +466,96 @@ describe("比分", () => {
     assert.equal(m.battles[0].auto.result, "OVER_FINISH");
     m = voidBattle(m, 0);
     assert.deepEqual(scoreOf(m), { P1: 0, P2: 0 });
+  });
+});
+
+describe("停轉確認只算有效觀測（實測誤判的根因）", () => {
+  test("停止後看不到 7 格：計時歸零，不得在 0.15 秒確認", () => {
+    const s = make(60);
+    s.launch();
+    let call = s.run(3 / 60, { A: { spinning: false } }); // 3 格有效停止
+    assert.equal(call, null);
+    call = s.run(7 / 60, { A: { visible: false, zone: "IN", spinning: null } });
+    assert.equal(call, null);
+    assert.ok(s.engine.events.some((e) => e.kind === "stop_reset" && e.bey === "A"));
+    call = s.run(6 / 60, { A: { spinning: false } }); // 重新開始，只有 6 格
+    assert.equal(call, null, "歸零後重算，有效觀測不足不能確認");
+    call = s.run(6 / 60, { A: { spinning: false } });
+    assert.equal(call?.result, "SPIN_FINISH");
+    close(call!.t_event, s.t - 12 / 60, 0.02);
+  });
+
+  test("量不到（null）的格不累計也不立即歸零：2 格以內的中斷可以接續", () => {
+    const s = make(60);
+    s.launch();
+    const tStop = s.t;
+    s.run(4 / 60, { B: { spinning: false } });
+    s.run(2 / 60, { B: { spinning: null } }); // 黏合或 peak 太低
+    let call = s.run(4 / 60, { B: { spinning: false } }); // 有效 1+3+... 共 8 格 → 7 個 dt
+    assert.equal(call, null);
+    call = s.run(3 / 60, { B: { spinning: false } });
+    assert.equal(call?.result, "SPIN_FINISH");
+    close(call!.t_event, tStop, 0.02);
+  });
+
+  test("只有 null 沒有任何 false 觀測，永遠不會判轉停", () => {
+    const s = make(60);
+    s.launch();
+    const call = s.run(2, { A: { spinning: null }, B: { spinning: null } });
+    assert.equal(call, null);
+  });
+
+  test("手提前進入時，疑似停止仍可作為候選（hand_early）", () => {
+    const s = make(60);
+    s.launch();
+    s.run(3 / 60, { B: { spinning: false } });
+    const call = s.run(1 / 60, { hand: true, B: { spinning: false } });
+    assert.equal(call?.result, "SPIN_FINISH");
+    assert.ok(call!.flags.includes("hand_early"));
+  });
+});
+
+/**
+ * 用 docs/autoref/baseline/traces 的實測觀測序列重播規則引擎。
+ * 觀測值是舊版影像管線的輸出（含沿用的 spinning=false），這裡只驗證引擎對「觀測中斷」的處理。
+ */
+function loadTrace(name: string, from: number, to: number): FrameObs[] {
+  const path = fileURLToPath(new URL(`../../docs/autoref/baseline/traces/${name}.jsonl.gz`, import.meta.url));
+  const text = gunzipSync(readFileSync(path)).toString("utf8");
+  const out: FrameObs[] = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    const r = JSON.parse(line) as { t: number; obs: FrameObs };
+    if (r.t >= from && r.t <= to) out.push(r.obs);
+  }
+  return out;
+}
+
+describe("實測影片觀測序列重播（docs/autoref/baseline）", () => {
+  test("18:46 段：A 停止後失去追蹤 7 格，原版在 1126.717 判 A 輸；修正後不得在 1127 前判 A", () => {
+    const obs = loadTrace("return_local_60fps", 1126.5, 1128.0);
+    assert.ok(obs.length > 60);
+    const engine = new RefereeEngine();
+    engine.manualStart(1126.5);
+    const calls: BattleCall[] = [];
+    for (const o of obs) {
+      const r = engine.update(o);
+      if (r.call) calls.push(r.call);
+    }
+    assert.ok(!calls.some((c) => c.loser_bey === "A" && c.t_called < 1127.0), JSON.stringify(calls));
+    assert.ok(engine.events.some((e) => e.kind === "stop_reset" && e.bey === "A"));
+  });
+
+  test("21:24 段：B 的 0.15 秒確認窗內只有 3 格有效觀測，原版在 1284.917 判 B 輸；修正後不得在 1285 前判定", () => {
+    const obs = loadTrace("contact_local_60fps", 1284.5, 1286.0);
+    assert.ok(obs.length > 60);
+    const engine = new RefereeEngine();
+    engine.manualStart(1284.5);
+    const calls: BattleCall[] = [];
+    for (const o of obs) {
+      const r = engine.update(o);
+      if (r.call) calls.push(r.call);
+    }
+    assert.ok(!calls.some((c) => c.t_called < 1285.0), JSON.stringify(calls));
   });
 });

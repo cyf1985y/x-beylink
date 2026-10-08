@@ -25,7 +25,27 @@ import { detectArenaHull } from "./zones.ts";
 const W = 240;
 const H = 240;
 
+/** 可重現的感光雜訊：真實相機前後格永遠不會完全相同，重複格會被當成「沒有新資訊」 */
+let seed = 12345;
+function noise(): number {
+  seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+  return (seed % 5) - 2; // -2..2
+}
+
 function blank(r = 40, g = 40, b = 40): Uint8ClampedArray {
+  const a = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0; i < W * H; i++) {
+    const n = noise();
+    a[i * 4] = r + n;
+    a[i * 4 + 1] = g + n;
+    a[i * 4 + 2] = b + n;
+    a[i * 4 + 3] = 255;
+  }
+  return a;
+}
+
+/** 完全沒有雜訊的平坦畫面（只給「重複格」測試用） */
+function flat(r = 40, g = 40, b = 40): Uint8ClampedArray {
   const a = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < W * H; i++) {
     a[i * 4] = r;
@@ -54,9 +74,10 @@ function disc(
       const a = Math.atan2(dy, dx);
       const k = 0.72 + 0.28 * Math.cos(3 * (a - phase)) * Math.cos(2 * (a - phase));
       const i = (y * W + x) * 4;
-      img[i] = color[0] * k;
-      img[i + 1] = color[1] * k;
-      img[i + 2] = color[2] * k;
+      const n = noise();
+      img[i] = color[0] * k + n;
+      img[i + 1] = color[1] * k + n;
+      img[i + 2] = color[2] * k + n;
       img[i + 3] = 255;
     }
   }
@@ -197,7 +218,9 @@ describe("自轉訊號（運動補償）", () => {
     const m = measureSpin(ga, gb, W, H, 100, 100, 106, 98, 28, 30, cfg);
     assert.ok(m.deltaDeg !== null);
     assert.ok(Math.abs(m.deltaDeg!) < 1.5, `delta=${m.deltaDeg}`);
-    assert.equal(decideSpinning(m, true, cfg), false, "簡單差值 30 但角度為零 → 停止");
+    assert.equal(decideSpinning(m, true, cfg), null, "沒有長延遲資料 → 未知");
+    assert.equal(decideSpinning({ ...m, longDeltaDeg: 0.5 }, true, cfg), false, "長延遲也≈0 → 停止");
+    assert.equal(decideSpinning({ ...m, longDeltaDeg: 9 }, true, cfg), true, "單格≈0 但隔 8 格轉了 9° → 混疊中的旋轉");
   });
 
   test("反轉時符號翻轉", () => {
@@ -217,9 +240,12 @@ describe("自轉訊號（運動補償）", () => {
 
   test("遲滯：高速模糊時簡單差值很高一律視為旋轉", () => {
     assert.equal(decideSpinning({ deltaDeg: null, peak: 0, diff: 80 }, false, cfg), true);
-    assert.equal(decideSpinning({ deltaDeg: null, peak: 0, diff: 20 }, true, cfg), true, "量不到則維持");
+    assert.equal(decideSpinning({ deltaDeg: null, peak: 0, diff: 20 }, true, cfg), null, "量不到＝未知，不沿用舊狀態");
+    assert.equal(decideSpinning({ deltaDeg: 0, peak: 1, diff: 0 }, true, cfg), null, "前後格完全相同＝沒有新資訊");
     assert.equal(decideSpinning({ deltaDeg: 4.5, peak: 0.9, diff: 20 }, true, cfg), true, "遲滯區維持");
-    assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 20 }, true, cfg), false);
+    assert.equal(decideSpinning({ deltaDeg: 4.5, peak: 0.9, diff: 20, longDeltaDeg: 12 }, false, cfg), true, "遲滯區但長延遲明顯在轉");
+    assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 20 }, true, cfg), null, "單格停止但無長延遲 → 未知");
+    assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 20, longDeltaDeg: 1 }, true, cfg), false);
   });
 });
 
@@ -307,8 +333,11 @@ describe("整條管線", () => {
     };
     run(80, 120, 0);
     run(80, 120, 0.3);
-    let r = run(80, 120, 0.3); // A 停住
+    let r = run(80, 120, 0.3); // A 停住，但長延遲歷史還不夠
     let A = r.obs.beys.find((b) => b.id === "A")!;
+    assert.equal(A.spinning, null, "歷史不足 8 格：未知，不是停止");
+    for (let i = 0; i < 8; i++) r = run(80, 120, 0.3);
+    A = r.obs.beys.find((b) => b.id === "A")!;
     assert.equal(A.spinning, false);
     r = run(82, 121, 0.3); // 停住但滾動
     A = r.obs.beys.find((b) => b.id === "A")!;
@@ -325,6 +354,42 @@ describe("整條管線", () => {
     assert.equal(B.zone, "IN");
   });
 
+  test("混疊：三重對稱紋理每格轉 119°，單格像 −1° 但長延遲看得出在轉，不得判停", () => {
+    const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
+    const sym = (img: Uint8ClampedArray, cx: number, cy: number, phase: number) => {
+      for (let y = Math.floor(cy - R); y <= Math.ceil(cy + R); y++) {
+        for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++) {
+          const dx = x - cx;
+          const dy = y - cy;
+          if (dx * dx + dy * dy > R * R) continue;
+          const a = Math.atan2(dy, dx);
+          const k = 0.72 + 0.28 * Math.cos(3 * (a - phase)); // 純三重對稱：週期 120°
+          const i = (y * W + x) * 4;
+          const n = noise();
+          img[i] = 220 * k + n;
+          img[i + 1] = 200 * k + n;
+          img[i + 2] = 60 * k + n;
+        }
+      }
+    };
+    const step = (119 * Math.PI) / 180;
+    let falseCount = 0;
+    let trueCount = 0;
+    for (let f = 0; f < 24; f++) {
+      const img = blank();
+      sym(img, 80, 120, f * step);
+      disc(img, 160, 120, R, f * 0.3, [80, 120, 240]);
+      const r = vp.process(img, f / 60);
+      const A = r.obs.beys.find((b) => b.id === "A")!;
+      if (f >= 10) {
+        if (A.spinning === false) falseCount++;
+        if (A.spinning === true) trueCount++;
+      }
+    }
+    assert.equal(falseCount, 0, "混疊中的旋轉陀螺不得被判停止");
+    assert.ok(trueCount >= 10, `長延遲應看出在轉（true=${trueCount}）`);
+  });
+
   test("手進盤：大面積前景", () => {
     const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
     const img = blank();
@@ -334,6 +399,37 @@ describe("整條管線", () => {
     const r = vp.process(img, 0);
     assert.equal(r.obs.hand, true);
     assert.ok(r.debug.blobs.some((b) => b.cls === "hand"));
+  });
+
+  test("盤外的大型前景（字幕條、器材）不算手；跨入盤內才算", () => {
+    const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
+    const img = blank();
+    disc(img, 80, 120, R, 0);
+    disc(img, 160, 120, R, 0);
+    rect(img, 0, 0, 240, 26, [180, 150, 120]); // 頂部標題條，完全在區域圖外
+    let r = vp.process(img, 0);
+    assert.equal(r.obs.hand, false);
+    const bar = r.debug.blobs.find((b) => b.cls === "hand");
+    assert.ok(bar && bar.inside === 0, "標題條被分類為手部尺寸，但盤內像素為 0");
+    const img2 = blank();
+    disc(img2, 80, 120, R, 0);
+    disc(img2, 160, 120, R, 0);
+    rect(img2, 100, 150, 60, 90, [180, 150, 120]); // 從底部伸進對戰區的手
+    r = vp.process(img2, 1 / 30);
+    assert.equal(r.obs.hand, true);
+  });
+
+  test("重複格：前後格完全相同時 spinning 為未知，不是停止", () => {
+    const vp = new VisionProcessor(
+      { ...calib(), background: flat() },
+      DEFAULT_VISION_CONFIG
+    );
+    const img = flat();
+    disc(img, 80, 120, R, 0.3, [220, 80, 80]);
+    disc(img, 160, 120, R, 0.7, [80, 120, 240]);
+    vp.process(img, 0);
+    const r = vp.process(img, 1 / 60);
+    for (const b of r.obs.beys) assert.equal(b.spinning, null);
   });
 
   test("鏡頭晃動：整張畫面前景比例過高", () => {

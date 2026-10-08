@@ -22,6 +22,7 @@ const EVENT_LABEL: Record<BattleEvent["kind"], string> = {
   out_of_frame: "出鏡",
   called: "判定",
   manual: "手動",
+  stop_reset: "停止計時歸零（觀測中斷）",
 };
 
 const ZONE_LABEL: Record<string, string> = { IN: "對戰區", XTREME: "極限區", OVER: "出界區", OUT: "盤外" };

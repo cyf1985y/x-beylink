@@ -26,6 +26,16 @@ export interface SpinConfig {
   minPeak: number;
   /** 簡單差值訊號高於此值一律視為旋轉（高速模糊，極座標法混疊） */
   diffHigh: number;
+  /**
+   * 長延遲比對：與 longLagFrames 格之前的影像再比一次。
+   * 高速時每格的角度會混疊成接近 0°（紋理對稱＋每格轉接近整數個週期），但轉速持續衰減，
+   * 混疊不可能在多格之間維持，所以隔 L 格的角度差會放大 L 倍；真正停止的陀螺隔 L 格仍≈0°。
+   */
+  longLagFrames: number;
+  /** 長延遲角度差低於此值（度）才接受「停止」 */
+  longStopDeg: number;
+  /** 保留幾格灰階歷史（≥ longLagFrames + 1） */
+  historyFrames: number;
 }
 
 export const DEFAULT_SPIN_CONFIG: SpinConfig = {
@@ -36,6 +46,9 @@ export const DEFAULT_SPIN_CONFIG: SpinConfig = {
   spinOffDeg: 3,
   minPeak: 0.35,
   diffHigh: 60,
+  longLagFrames: 8,
+  longStopDeg: 4,
+  historyFrames: 16,
 };
 
 export interface SpinMeasure {
@@ -45,6 +58,10 @@ export interface SpinMeasure {
   peak: number;
   /** 簡單差值訊號（遮罩內平均絕對差） */
   diff: number;
+  /** 與 longLag 格之前比的角度差（度）；沒有足夠歷史或量不到時為 null */
+  longDeltaDeg?: number | null;
+  /** 長延遲實際用的格數 */
+  longLag?: number;
 }
 
 /** 極座標展開：回傳 radii × angles 的浮點陣列，每圈已減去平均值 */
@@ -165,13 +182,34 @@ export function measureSpin(
 
 /**
  * 遲滯判斷：由量測值與前一格的狀態決定「是否旋轉」。
- * 回傳 null 代表本格判斷不了（維持原狀由呼叫端決定）。
+ * 回傳 null 代表本格沒有可用的觀測（量不到、或前後格完全相同沒有新資訊）。
+ * 量不到時不沿用舊狀態：舊狀態會讓停轉計時在沒有證據的期間繼續累計。
+ * 只有介於 spinOffDeg 與 spinOnDeg 之間的遲滯區才維持前一格。
  */
 export function decideSpinning(m: SpinMeasure, prev: boolean | null, cfg: SpinConfig): boolean | null {
   if (m.diff >= cfg.diffHigh) return true; // 高速模糊：一定在轉
-  if (m.deltaDeg === null) return prev; // 量不到：維持
+  if (isDuplicateFrame(m)) return null; // 前後格相同（重複格）：沒有新資訊，不是停止
+  if (m.deltaDeg === null) return null; // 量不到
   const mag = Math.abs(m.deltaDeg);
   if (mag >= cfg.spinOnDeg) return true;
-  if (mag <= cfg.spinOffDeg) return false;
+  const long = m.longDeltaDeg;
+  if (mag <= cfg.spinOffDeg) {
+    // 單格看起來停了：還要長延遲也≈0 才算停止（破解混疊）；沒有長延遲資料＝未知
+    if (long === null || long === undefined) return null;
+    const lmag = Math.abs(long);
+    if (lmag <= cfg.longStopDeg) return false;
+    if (lmag >= cfg.spinOnDeg) return true;
+    return null;
+  }
+  // 遲滯區：維持前一格；但長延遲明顯在轉就直接判旋轉
+  if (long !== null && long !== undefined && Math.abs(long) >= cfg.spinOnDeg) return true;
   return prev;
+}
+
+/**
+ * 前後兩格完全相同：遮罩內平均絕對差為 0 且互相關峰值 ≈ 1。
+ * 真實相機有感光雜訊，差值不會是 0；這是串流重複格或取格重複的特徵。
+ */
+export function isDuplicateFrame(m: SpinMeasure): boolean {
+  return m.diff < 0.5 && m.peak > 0.995;
 }

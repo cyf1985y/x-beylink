@@ -62,5 +62,10 @@ npm test           # 自動裁判單元測試（node --test，Node 22 原生 TS�
   - 頁面：校正（拍背景、紅框自動框對戰區、拖曳極限／出界區、量陀螺面積）、對戰（疊圖、比分、判定卡：確認／改判／重賽不計分、手動爆裂／開始這一局）、回放（每局影片逐格、事件時間軸、匯出）、設定（所有門檻可調、除錯模式）
   - 儲存：IndexedDB（`lib/autoref/storage.ts`），不需後端；PWA：`public/autoref/manifest.webmanifest`＋`public/autoref-sw.js`
   - `lib/autoref` 內部 import 一律帶 `.ts` 副檔名（tsconfig `allowImportingTsExtensions`），讓 Node 測試與 Next 都能解析
-  - 尚未實測：運動補償自轉訊號只在合成影像上驗證過，是雛形第一個技術風險；規格 7.2 待作者確認的事項（平手門檻、提前伸手處置、盤型、賽制）預設值見 `lib/autoref/types.ts`
+  - 影片實測（`docs/autoref/`，Codex 以 YouTube 對戰影片離線重播，含逐格 trace 與重跑工具）找出三類誤判並已修正：
+    1. 手部只累計落在區域圖內的像素（盤外字幕／器材不算手，否則整片卡在 ARMED）
+    2. 停轉確認只累計「有效的停止觀測」：看不到、黏合、量不到、重複格都不算，中斷超過 `spinStopMaxGapFrames` 格歸零；影像管線沒有新量測時回報 null，不沿用舊狀態
+    3. 長延遲比對（`spin.longLagFrames`）：單格角度≈0 還要隔 L 格的角度也≈0 才算停止，破解高速時紋理對稱造成的混疊
+  - `docs/autoref/baseline/traces` 的觀測序列已是 `rules.test.ts` 的回歸測試；重跑影片需本機有原始 MP4（雲端容器抓不到 YouTube），Node 22 要加 `--experimental-strip-types`
+  - 尚未在真機實測；規格 7.2 待作者確認的事項（平手門檻、提前伸手處置、盤型、賽制）預設值見 `lib/autoref/types.ts`
 - 下一步：Phase 2（抽籤制、自動組隊、對戰表／計分板、成就徽章、分享海報）；自動裁判假日實地驗收（規格 7.1）

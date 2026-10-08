@@ -21,12 +21,25 @@ import {
   type Zone,
 } from "./types.ts";
 
+/**
+ * 一段「停止」觀測：只有本格確實看到且量到停止才累計；看不到、黏合、量不到的格
+ * 只增加 gap，gap 超過上限就整段歸零。沒有觀測的時間不算證據。
+ */
+interface StopRun {
+  /** 首次觀測到停止的時間（終結時間用） */
+  since: number;
+  /** 有效停止觀測累計的秒數 */
+  validSec: number;
+  /** 目前連續沒有有效觀測的格數 */
+  gap: number;
+}
+
 /** 進區後尚未確認的終結 */
 interface PendingEntry {
   zone: "XTREME" | "OVER";
   tEnter: number;
-  /** 在區內停止旋轉的起始時間 */
-  stoppedSince: number | null;
+  /** 在區內停止旋轉的觀測 */
+  stop: StopRun | null;
   /** 進區後從畫面消失的時間 */
   vanishedAt: number | null;
 }
@@ -49,8 +62,8 @@ interface Track {
   lastSeenT: number;
   pending: PendingEntry | null;
   reverses: number;
-  /** 對戰區內自轉訊號首次低於門檻的時間 */
-  suspectStopAt: number | null;
+  /** 對戰區內的停止觀測（疑似轉停） */
+  stop: StopRun | null;
   /** 從非口袋位置離開畫面的時間 */
   outSince: number | null;
   /** 回到對戰區後持續旋轉的起始時間（復活判定用） */
@@ -81,7 +94,7 @@ function newTrack(id: BeyId, t: number): Track {
     lastSeenT: t,
     pending: null,
     reverses: 0,
-    suspectStopAt: null,
+    stop: null,
     outSince: null,
     inSpinSince: null,
     confirmed: null,
@@ -133,7 +146,7 @@ export class RefereeEngine {
         zone: tr.zone,
         spinning: tr.spinning,
         pending: tr.pending?.zone ?? null,
-        suspectStop: tr.suspectStopAt !== null,
+        suspectStop: tr.stop !== null,
         visible: tr.visible,
       };
     }
@@ -278,17 +291,16 @@ export class RefereeEngine {
       if (ob.zone === "XTREME" || ob.zone === "OVER") {
         tr.inSpinSince = null;
         if (!tr.pending) {
-          tr.pending = { zone: ob.zone, tEnter: t, stoppedSince: null, vanishedAt: null };
-          tr.suspectStopAt = null;
+          tr.pending = { zone: ob.zone, tEnter: t, stop: null, vanishedAt: null };
+          tr.stop = null;
           this.events.push({ t, kind: "enter", bey: id, zone: ob.zone });
         } else {
           tr.pending.vanishedAt = null;
           if (ob.zone === tr.pending.zone) {
-            if (ob.spinning === false) tr.pending.stoppedSince ??= t;
-            else if (ob.spinning === true) tr.pending.stoppedSince = null;
+            tr.pending.stop = this.observeStop(tr.pending.stop, ob.spinning, t);
           } else {
             // 跨到另一個區（極限區↔出界區）：以最先進入的區為準，停止計時重算
-            tr.pending.stoppedSince = null;
+            tr.pending.stop = null;
           }
         }
         continue;
@@ -297,31 +309,19 @@ export class RefereeEngine {
       // ob.zone === "IN"
       if (tr.pending) {
         tr.pending.vanishedAt = null;
-        tr.pending.stoppedSince = null;
+        tr.pending.stop = null;
         // 回到對戰區：復活（需兩顆旋轉中）或在對戰區停住（不算出界，走轉停）
-        if (ob.spinning === false) {
-          tr.inSpinSince = null;
-          tr.suspectStopAt ??= t;
-          if (t - tr.suspectStopAt >= c.zoneStopConfirmSec) {
-            this.cancelPending(tr, t, "stopped_in_arena");
-          }
-        } else if (ob.spinning === true) {
-          tr.suspectStopAt = null;
-          tr.inSpinSince ??= t;
+        if (ob.spinning === false) tr.inSpinSince = null;
+        else if (ob.spinning === true) tr.inSpinSince ??= t;
+        tr.stop = this.observeStop(tr.stop, ob.spinning, t, id);
+        if (tr.stop && tr.stop.validSec >= c.zoneStopConfirmSec) {
+          this.cancelPending(tr, t, "stopped_in_arena");
         }
         continue;
       }
 
-      // 6. 轉停：對戰區內自轉訊號低於門檻
-      if (ob.spinning === false) {
-        if (tr.suspectStopAt === null) {
-          tr.suspectStopAt = t;
-          this.events.push({ t, kind: "suspect_stop", bey: id });
-        }
-      } else if (ob.spinning === true && tr.suspectStopAt !== null) {
-        tr.suspectStopAt = null;
-        this.events.push({ t, kind: "resume_spin", bey: id });
-      }
+      // 6. 轉停：對戰區內自轉訊號低於門檻（只累計有效觀測）
+      tr.stop = this.observeStop(tr.stop, ob.spinning, t, id);
     }
 
     // 復活：待確認的陀螺保持旋轉回到對戰區，且另一顆也在對戰區內（旋轉中或已停）
@@ -345,7 +345,7 @@ export class RefereeEngine {
       const p = tr.pending;
       if (p) {
         let how: string | null = null;
-        if (p.stoppedSince !== null && t - p.stoppedSince >= c.zoneStopConfirmSec) how = "stopped";
+        if (p.stop !== null && p.stop.validSec >= c.zoneStopConfirmSec) how = "stopped";
         else if (p.vanishedAt !== null && t - p.vanishedAt >= c.zoneVanishConfirmSec) how = "vanished";
         else if (
           (tr.zone === "XTREME" || tr.zone === "OVER") &&
@@ -365,11 +365,11 @@ export class RefereeEngine {
         }
         continue;
       }
-      if (tr.suspectStopAt !== null && t - tr.suspectStopAt >= c.spinStopConfirmSec) {
+      if (tr.stop !== null && tr.stop.validSec >= c.spinStopConfirmSec) {
         tr.confirmed = {
           bey: id,
           result: "SPIN_FINISH",
-          tEvent: tr.suspectStopAt,
+          tEvent: tr.stop.since,
           resolved: true,
           how: "spin",
         };
@@ -392,12 +392,39 @@ export class RefereeEngine {
     return this.resolve(t);
   }
 
+  /**
+   * 餵入一格的自轉觀測到停止計時：true 歸零、false 累計、null（看不到／量不到）只記 gap。
+   * gap 超過 spinStopMaxGapFrames 整段歸零，之後重新開始算。
+   */
+  private observeStop(run: StopRun | null, spinning: boolean | null, t: number, bey?: BeyId): StopRun | null {
+    if (spinning === true) {
+      if (run && bey) this.events.push({ t, kind: "resume_spin", bey });
+      return null;
+    }
+    if (spinning === false) {
+      if (!run) {
+        if (bey) this.events.push({ t, kind: "suspect_stop", bey });
+        return { since: t, validSec: 0, gap: 0 };
+      }
+      return { since: run.since, validSec: run.validSec + this.lastDt, gap: 0 };
+    }
+    // 本格沒有有效觀測
+    if (!run) return null;
+    if (run.gap + 1 > this.config.spinStopMaxGapFrames) {
+      if (bey) this.events.push({ t, kind: "stop_reset", bey, note: `gap>${this.config.spinStopMaxGapFrames}` });
+      return null;
+    }
+    return { ...run, gap: run.gap + 1 };
+  }
+
   private updateInvisible(tr: Track, t: number) {
     tr.visible = false;
     tr.spinning = null;
+    // 看不到也是「沒有觀測」：停止計時只記 gap，不累計、也不立刻歸零
+    tr.stop = this.observeStop(tr.stop, null, t, tr.id);
     if (tr.pending) {
       tr.pending.vanishedAt ??= t;
-      tr.pending.stoppedSince = null;
+      tr.pending.stop = this.observeStop(tr.pending.stop, null, t);
       if (tr.pending.vanishedAt === t) {
         this.events.push({ t, kind: "disappear", bey: tr.id, zone: tr.pending.zone });
       }
@@ -433,8 +460,8 @@ export class RefereeEngine {
           tEvent: tr.pending.tEnter,
           resolved: false,
         });
-      } else if (tr.suspectStopAt !== null) {
-        out.push({ bey: id, result: "SPIN_FINISH", tEvent: tr.suspectStopAt, resolved: false });
+      } else if (tr.stop !== null) {
+        out.push({ bey: id, result: "SPIN_FINISH", tEvent: tr.stop.since, resolved: false });
       } else if (tr.outSince !== null) {
         out.push({ bey: id, result: "NO_CALL", tEvent: tr.outSince, resolved: false });
       }

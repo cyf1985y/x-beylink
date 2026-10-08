@@ -20,6 +20,20 @@
 | 18:46–19:07 | 18:46.72 高信心轉停 | 追蹤已缺失 7 格；實際兩顆仍繼續對戰 |
 | 21:24–21:33 | 21:24.92 高信心轉停 | 當格自轉量測未知；畫面仍持續旋轉及碰撞 |
 
+## 修正紀錄（Claude Code，基準之後）
+
+依本報告分析後的三項修正，均附單元測試（`npm test`，58 項）：
+
+| 修正 | 位置 | 對應的失敗 |
+| --- | --- | --- |
+| 手部只累計落在區域圖內的像素 | `lib/autoref/vision/pipeline.ts` `insideZonePixels` | 10:10.50 假手部；整片 95% 影格被標題條標成有手而卡在 ARMED |
+| 停轉確認只累計有效停止觀測；看不到／黏合／量不到／重複格只記 gap，超過 `spinStopMaxGapFrames`（預設 2）歸零；管線無新量測時回報 null | `lib/autoref/rules.ts` `observeStop`、`lib/autoref/vision/spin.ts` `decideSpinning` | 18:46.72（追蹤缺失 7 格）、21:24.92（確認窗內只有 3 格有效觀測）、45.483／45.533 的重複格 |
+| 長延遲比對：單格角度≈0 還要隔 `spin.longLagFrames`（預設 8）格的角度 ≤ `spin.longStopDeg`（預設 4°）才算停止 | `lib/autoref/vision/pipeline.ts` 灰階歷史、`spin.ts` | 00:46.10 的混疊（單格 ±3° 內正負跳動、peak 高） |
+
+`baseline/traces/return_local_60fps` 與 `contact_local_60fps` 的觀測序列已寫成 `lib/autoref/rules.test.ts` 的回歸測試（引擎層；觀測值仍是舊管線輸出）。00:46 的混疊屬影像層，用合成的三重對稱紋理每格轉 119° 做測試（`vision.test.ts`）；真實片段需用下方工具重跑影片驗證，雲端容器抓不到 YouTube，請在本機執行。
+
+Node 22 執行工具需加旗標：`node --experimental-strip-types docs/autoref/tools/run_video.mjs …`。
+
 ## 目錄
 
 | 位置 | 用途 |
