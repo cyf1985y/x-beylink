@@ -118,6 +118,8 @@ export class RefereeEngine {
   private lastDt = 1 / 30;
   private quietSince: number | null = null;
   private twoSpinningSince: number | null = null;
+  /** 開局確認窗內，每顆陀螺是否至少量到一次旋轉 */
+  private startSeenSpin: Record<BeyId, boolean> = { A: false, B: false };
   private tracks: Record<BeyId, Track> = {
     A: newTrack("A", 0),
     B: newTrack("B", 0),
@@ -206,25 +208,34 @@ export class RefereeEngine {
           this.state = "ARMED";
           this.twoSpinningSince = null;
           this.events.push({ t, kind: "armed" });
+        } else if (this.config.autoStartWithoutHand && this.trackStartWindow(obs, t)) {
+          // 沒偵測到手（發射太快、手在畫面外）但兩顆已在盤內旋轉：備援開局，確認時間加倍
+          if (this.startWindowReady(t, this.config.liveConfirmSec * 2)) {
+            this.beginLive(t, false, "auto_no_hand");
+          }
         }
         break;
       case "ARMED":
         if (obs.hand) {
           this.twoSpinningSince = null;
-        } else if (this.twoSpinningIn(obs)) {
-          this.twoSpinningSince ??= t;
-          if (t - this.twoSpinningSince >= this.config.liveConfirmSec) {
+        } else if (this.trackStartWindow(obs, t)) {
+          if (this.startWindowReady(t, this.config.liveConfirmSec)) {
             this.beginLive(t, false);
           }
-        } else {
-          this.twoSpinningSince = null;
         }
         break;
       case "LIVE":
         call = this.stepLive(obs);
         break;
       case "CALLED":
-        if (!obs.hand && !obs.beys.some((b) => b.visible && b.spinning === true)) {
+        if (obs.hand && t - (this.call?.t_called ?? t) >= this.config.idleClearSec) {
+          // 判定後手進來撿陀螺／重新發射：直接進入下一局的 ARMED。
+          // 實測顯示「盤內清空且無手 0.5 秒」在連續對戰中常常不會出現（撿起來就直接再發射）。
+          this.nextBattle(t);
+          this.state = "ARMED";
+          this.twoSpinningSince = null;
+          this.events.push({ t, kind: "armed", note: "after_call" });
+        } else if (!obs.hand && !obs.beys.some((b) => b.visible && b.spinning === true)) {
           this.quietSince ??= t;
           if (t - this.quietSince >= this.config.idleClearSec) {
             this.nextBattle(t);
@@ -244,14 +255,45 @@ export class RefereeEngine {
     return inSpin.length >= 2;
   }
 
-  private beginLive(t: number, manual: boolean) {
+  /**
+   * 開局確認窗：兩顆都在對戰區可見、沒有任何一顆量到「停止」，窗就持續；
+   * 發射瞬間影像模糊常量不到角度（null），不能要求每一格都量到旋轉。
+   * 回傳 false 代表窗已重置（看不到、不在對戰區、或量到停止）。
+   */
+  private trackStartWindow(obs: FrameObs, t: number): boolean {
+    const inArena = obs.beys.filter((b) => b.visible && b.zone === "IN");
+    const anyStopped = obs.beys.some((b) => b.visible && b.spinning === false);
+    if (inArena.length < 2 || anyStopped) {
+      this.twoSpinningSince = null;
+      this.startSeenSpin = { A: false, B: false };
+      return false;
+    }
+    if (this.twoSpinningSince === null) {
+      this.twoSpinningSince = t;
+      this.startSeenSpin = { A: false, B: false };
+    }
+    for (const b of inArena) if (b.spinning === true) this.startSeenSpin[b.id] = true;
+    return true;
+  }
+
+  /** 窗持續夠久，且每顆至少量到一次旋轉 */
+  private startWindowReady(t: number, sec: number): boolean {
+    return (
+      this.twoSpinningSince !== null &&
+      t - this.twoSpinningSince >= sec &&
+      this.startSeenSpin.A &&
+      this.startSeenSpin.B
+    );
+  }
+
+  private beginLive(t: number, manual: boolean, note?: string) {
     this.state = "LIVE";
     this.liveAt = t;
     this.call = null;
     this.quietSince = null;
     this.twoSpinningSince = null;
     this.tracks = { A: newTrack("A", t), B: newTrack("B", t) };
-    this.events.push({ t, kind: "live", note: manual ? "manual" : undefined });
+    this.events.push({ t, kind: "live", note: manual ? "manual" : note });
   }
 
   private stepLive(obs: FrameObs): BattleCall | null {
@@ -505,7 +547,10 @@ export class RefereeEngine {
 
   /** 手進盤：若已有候選終結，以最早者判定並標記 hand_early；否則無法判定 */
   private callOnHand(t: number): BattleCall {
-    const cands = this.candidates().filter((x) => x.result !== "NO_CALL");
+    const minAge = this.config.handEarlyMinCandidateSec;
+    const cands = this.candidates().filter(
+      (x) => x.result !== "NO_CALL" && (x.resolved || t - x.tEvent >= minAge)
+    );
     const flags = this.commonFlags();
     if (cands.length === 0) {
       return this.finish(

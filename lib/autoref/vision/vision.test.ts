@@ -419,6 +419,18 @@ describe("整條管線", () => {
     assert.equal(r.obs.hand, true);
   });
 
+  test("盤外的陀螺尺寸物件（字幕、器材）不是陀螺候選", () => {
+    const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
+    const img = blank();
+    disc(img, 80, 120, R, 0, [220, 80, 80]);
+    disc(img, 160, 120, R, 0.5, [80, 120, 240]);
+    disc(img, 200, 228, R, 0.2, [240, 240, 240]); // 區域圖外（對戰區與極限區之下、口袋之外）
+    const r = vp.process(img, 0);
+    assert.equal(r.obs.beys.length, 2);
+    assert.ok(r.obs.beys.every((b) => b.y! < 200));
+    assert.ok(r.debug.blobs.some((b) => b.cls === "discard" && Math.abs(b.cy - 228) < 3));
+  });
+
   test("重複格：前後格完全相同時 spinning 為未知，不是停止", () => {
     const vp = new VisionProcessor(
       { ...calib(), background: flat() },

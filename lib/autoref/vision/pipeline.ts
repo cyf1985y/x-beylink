@@ -138,6 +138,8 @@ export class VisionProcessor {
   private posHist: Record<BeyId, Float64Array> = { A: new Float64Array(0), B: new Float64Array(0) };
   private posValid: Record<BeyId, Uint8Array> = { A: new Uint8Array(0), B: new Uint8Array(0) };
   private frameNo = 0;
+  private lastT: number | null = null;
+  private lastDt = 1 / 30;
   private readonly mask: Uint8Array;
   private readonly tmpA: Uint8Array;
   private readonly tmpB: Uint8Array;
@@ -228,7 +230,13 @@ export class VisionProcessor {
       } else if (aspect > c.maxAspect) cls = "discard";
       else if (b.area >= c.beyMinRatio * A && b.area <= c.beyMaxRatio * A) cls = "bey";
       else cls = "discard";
-      out.push({ ...b, cls, inside: cls === "hand" ? this.insideZonePixels(b) : 0 });
+      let inside = 0;
+      if (cls === "hand" || cls === "bey" || cls === "merged") {
+        inside = this.insideZonePixels(b);
+        // 陀螺只可能在對戰區／極限區／出界區裡；大部分像素落在區域圖外的物件（字幕、器材、人影）不是陀螺
+        if (cls !== "hand" && inside < c.beyInsideMinRatio * b.area) cls = "discard";
+      }
+      out.push({ ...b, cls, inside });
     }
     return out;
   }
@@ -381,7 +389,10 @@ export class VisionProcessor {
 
     const H = this.historyLen;
     const prevGray = this.frameNo > 0 ? this.history[(this.frameNo - 1) % H] : null;
-    const L = Math.min(Math.max(1, Math.floor(c.spin.longLagFrames)), H - 1);
+    if (this.lastT !== null && t > this.lastT) this.lastDt = t - this.lastT;
+    this.lastT = t;
+    const lagFromSec = c.spin.longLagSec > 0 ? Math.round(c.spin.longLagSec / this.lastDt) : c.spin.longLagFrames;
+    const L = Math.min(Math.max(2, lagFromSec), H - 1);
     const beys: BeyObs[] = [];
     let anyMerged = false;
     for (const id of ["A", "B"] as BeyId[]) {
@@ -410,16 +421,21 @@ export class VisionProcessor {
       } else if (prev && prev.visible && prevGray && !prev.merged) {
         const diff = maskedDiff(prevGray, this.gray, this.labels, b.label, b.bbox, w);
         spin = measureSpin(prevGray, this.gray, w, h, prev.cx, prev.cy, b.cx, b.cy, radius, diff, c.spin, this.polarScratch);
-        // 長延遲比對：與 L 格之前（該格可見且未黏合）的影像再比一次
-        const slotL = this.frameNo - L;
-        if (slotL >= 0 && this.posValid[id][slotL % H]) {
+        // 長延遲比對：與 L 格之前（該格可見且未黏合）的影像再比一次。
+        // 隔太久外觀變化大（滾動、光線）會量不到，退而用 L/2；混疊的放大倍數小一點但仍有效。
+        spin.longDeltaDeg = null;
+        for (const lag of [L, Math.floor(L / 2)]) {
+          if (lag < 2) break;
+          const slotL = this.frameNo - lag;
+          if (slotL < 0 || !this.posValid[id][slotL % H]) continue;
           const px = this.posHist[id][(slotL % H) * 2];
           const py = this.posHist[id][(slotL % H) * 2 + 1];
           const mL = measureSpin(this.history[slotL % H], this.gray, w, h, px, py, b.cx, b.cy, radius, diff, c.spin, this.polarScratch);
-          spin.longDeltaDeg = mL.deltaDeg;
-          spin.longLag = L;
-        } else {
-          spin.longDeltaDeg = null;
+          if (mL.deltaDeg !== null) {
+            spin.longDeltaDeg = mL.deltaDeg;
+            spin.longLag = lag;
+            break;
+          }
         }
         spinning = decideSpinning(spin, prev.spinning, c.spin);
       }

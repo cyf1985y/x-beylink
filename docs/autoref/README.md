@@ -34,6 +34,8 @@
 
 Node 22 執行工具需加旗標：`node --experimental-strip-types docs/autoref/tools/run_video.mjs …`。
 
+第二批素材（使用者上傳的 test3 影片，舊版工具疊圖螢幕錄影）的校正、逐局結果與重跑方式見 [clips/test3/README.md](clips/test3/README.md)；通用的單片重播工具是 `tools/run_clip.ts`（原始解析度、自動開局）。
+
 ## 目錄
 
 | 位置 | 用途 |

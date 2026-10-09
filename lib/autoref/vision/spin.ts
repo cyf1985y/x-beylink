@@ -32,9 +32,14 @@ export interface SpinConfig {
    * 混疊不可能在多格之間維持，所以隔 L 格的角度差會放大 L 倍；真正停止的陀螺隔 L 格仍≈0°。
    */
   longLagFrames: number;
+  /**
+   * 長延遲以秒為準（優先於 longLagFrames）：混疊的漂移來自轉速衰減，是時間的函數，
+   * 所以 60 fps 要隔的格數是 30 fps 的兩倍。依每格間隔換算，上限 historyFrames − 1。
+   */
+  longLagSec: number;
   /** 長延遲角度差低於此值（度）才接受「停止」 */
   longStopDeg: number;
-  /** 保留幾格灰階歷史（≥ longLagFrames + 1） */
+  /** 保留幾格灰階歷史（≥ 換算後的長延遲格數 + 1） */
   historyFrames: number;
 }
 
@@ -47,8 +52,9 @@ export const DEFAULT_SPIN_CONFIG: SpinConfig = {
   minPeak: 0.35,
   diffHigh: 60,
   longLagFrames: 8,
+  longLagSec: 0.27,
   longStopDeg: 4,
-  historyFrames: 16,
+  historyFrames: 20,
 };
 
 export interface SpinMeasure {

@@ -121,6 +121,13 @@ export interface RuleConfig {
   >;
   /** 先得幾分獲勝 */
   winScore: number;
+  /** 待機時沒偵測到手、但兩顆陀螺已在盤內旋轉（連續 liveConfirmSec 的兩倍）就自動開局 */
+  autoStartWithoutHand: boolean;
+  /**
+   * 手提前進入時，未確認的候選（進區待確認、疑似停止）至少要存在此秒數才可拿來判定；
+   * 只看到一兩格的進區或停止不算證據，否則剪接、閃爍都會變成終結。
+   */
+  handEarlyMinCandidateSec: number;
 }
 
 export const DEFAULT_RULE_CONFIG: RuleConfig = {
@@ -132,6 +139,8 @@ export const DEFAULT_RULE_CONFIG: RuleConfig = {
   zoneStayConfirmSec: 3,
   spinStopConfirmSec: 0.15,
   spinStopMaxGapFrames: 2,
+  autoStartWithoutHand: true,
+  handEarlyMinCandidateSec: 0.1,
   outOfFrameSec: 1.5,
   drawToleranceSec: null,
   points: { XTREME_FINISH: 3, OVER_FINISH: 2, BURST_FINISH: 2, SPIN_FINISH: 1 },

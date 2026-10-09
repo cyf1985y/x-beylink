@@ -1,0 +1,237 @@
+{
+ "video": "beyblade_referee_test3.mp4",
+ "sha256_prefix": "5601e673573a84ba",
+ "frames": 2161,
+ "fps": 30,
+ "meanMs": 17.89,
+ "handFrames": 680,
+ "transitions": [
+  {
+   "t": 1.1,
+   "from": "IDLE",
+   "to": "LIVE"
+  },
+  {
+   "t": 3.733,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 4.233,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 6.3,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 14.033,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 14.533,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 18,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 26.867,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 27.367,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 29.2,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 32.4,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 33.733,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 41.2,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 44.467,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 44.967,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 48.533,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 59.867,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 60.367,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 63.4,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 63.5,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 65.367,
+   "from": "CALLED",
+   "to": "ARMED"
+  },
+  {
+   "t": 67.9,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 68.233,
+   "from": "LIVE",
+   "to": "CALLED"
+  },
+  {
+   "t": 68.733,
+   "from": "CALLED",
+   "to": "ARMED"
+  }
+ ],
+ "calls": [
+  {
+   "battle": 1,
+   "result": "OVER_FINISH",
+   "winner": "P1",
+   "points": 2,
+   "t_event": 2.566666666666667,
+   "t_called": 3.7333333333333334,
+   "flags": [
+    "hand_early"
+   ],
+   "confidence": "medium",
+   "loser_bey": "B"
+  },
+  {
+   "battle": 2,
+   "result": "OVER_FINISH",
+   "winner": "P1",
+   "points": 2,
+   "t_event": 11.833333333333334,
+   "t_called": 14.033333333333333,
+   "flags": [
+    "reverse_x1",
+    "hand_early"
+   ],
+   "confidence": "medium",
+   "loser_bey": "B"
+  },
+  {
+   "battle": 3,
+   "result": "NO_CALL",
+   "winner": null,
+   "points": 0,
+   "t_event": null,
+   "t_called": 26.866666666666667,
+   "flags": [
+    "hand_before_call"
+   ],
+   "confidence": "low",
+   "loser_bey": null
+  },
+  {
+   "battle": 4,
+   "result": "OVER_FINISH",
+   "winner": "P1",
+   "points": 2,
+   "t_event": 30.733333333333334,
+   "t_called": 32.4,
+   "flags": [
+    "hand_early"
+   ],
+   "confidence": "medium",
+   "loser_bey": "B"
+  },
+  {
+   "battle": 5,
+   "result": "OVER_FINISH",
+   "winner": "P2",
+   "points": 2,
+   "t_event": 42.833333333333336,
+   "t_called": 44.46666666666667,
+   "flags": [
+    "hand_early"
+   ],
+   "confidence": "medium",
+   "loser_bey": "A"
+  },
+  {
+   "battle": 6,
+   "result": "NO_CALL",
+   "winner": null,
+   "points": 0,
+   "t_event": null,
+   "t_called": 59.86666666666667,
+   "flags": [
+    "hand_before_call"
+   ],
+   "confidence": "low",
+   "loser_bey": null
+  },
+  {
+   "battle": 7,
+   "result": "NO_CALL",
+   "winner": null,
+   "points": 0,
+   "t_event": null,
+   "t_called": 63.5,
+   "flags": [
+    "hand_before_call"
+   ],
+   "confidence": "low",
+   "loser_bey": null
+  },
+  {
+   "battle": 8,
+   "result": "NO_CALL",
+   "winner": null,
+   "points": 0,
+   "t_event": null,
+   "t_called": 68.23333333333333,
+   "flags": [
+    "hand_before_call"
+   ],
+   "confidence": "low",
+   "loser_bey": null
+  }
+ ]
+}

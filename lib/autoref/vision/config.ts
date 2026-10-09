@@ -25,6 +25,8 @@ export interface VisionConfig {
   maxAspect: number;
   /** 「完全進入」：遮罩像素落在某區的比例 */
   zoneInsideRatio: number;
+  /** 陀螺候選：至少此比例的像素要落在區域圖內，否則視為盤外物件 */
+  beyInsideMinRatio: number;
   /** 整張畫面前景比例超過此值視為鏡頭晃動／光線改變 */
   shakeRatio: number;
   /** 黏合判定：前一格兩顆距離小於陀螺直徑的幾倍才允許視為黏合 */
@@ -43,6 +45,7 @@ export const DEFAULT_VISION_CONFIG: VisionConfig = {
   handInsideRatio: 5,
   maxAspect: 1.9,
   zoneInsideRatio: 0.85,
+  beyInsideMinRatio: 0.5,
   shakeRatio: 0.4,
   mergeDistanceScale: 1.6,
   spin: DEFAULT_SPIN_CONFIG,

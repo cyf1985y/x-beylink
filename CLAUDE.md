@@ -67,5 +67,6 @@ npm test           # 自動裁判單元測試（node --test，Node 22 原生 TS�
     2. 停轉確認只累計「有效的停止觀測」：看不到、黏合、量不到、重複格都不算，中斷超過 `spinStopMaxGapFrames` 格歸零；影像管線沒有新量測時回報 null，不沿用舊狀態
     3. 長延遲比對（`spin.longLagFrames`）：單格角度≈0 還要隔 L 格的角度也≈0 才算停止，破解高速時紋理對稱造成的混疊
   - `docs/autoref/baseline/traces` 的觀測序列已是 `rules.test.ts` 的回歸測試；重跑影片需本機有原始 MP4（雲端容器抓不到 YouTube），Node 22 要加 `--experimental-strip-types`
+  - 第二批（`docs/autoref/clips/test3`，`tools/run_clip.ts`）帶出的流程修正：判定後手進來即進下一局 ARMED、開局窗容忍量不到的格、無手備援開局、手提前進入的候選最短存在時間、盤外陀螺尺寸物件不算陀螺、長延遲以秒計
   - 尚未在真機實測；規格 7.2 待作者確認的事項（平手門檻、提前伸手處置、盤型、賽制）預設值見 `lib/autoref/types.ts`
 - 下一步：Phase 2（抽籤制、自動組隊、對戰表／計分板、成就徽章、分享海報）；自動裁判假日實地驗收（規格 7.1）

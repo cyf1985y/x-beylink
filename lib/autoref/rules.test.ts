@@ -119,14 +119,50 @@ describe("開局狀態機", () => {
     const call = s.run(1, { B: { zone: "OVER", spinning: false } });
     assert.equal(call?.result, "OVER_FINISH");
     assert.equal(s.engine.state, "CALLED");
-    s.run(0.3, { hand: true, A: null, B: null }); // 撿陀螺
-    assert.equal(s.engine.state, "CALLED");
     s.run(0.6, { A: null, B: null });
     assert.equal(s.engine.state, "IDLE");
     assert.equal(s.engine.battleNo, 2);
     s.run(0.3, { hand: true, A: null, B: null });
     s.run(0.5);
     assert.equal(s.engine.state, "LIVE");
+  });
+
+  test("判定後手進來撿陀螺／再發射：直接進入下一局 ARMED（連續對戰不會有清空空檔）", () => {
+    const s = make();
+    s.launch();
+    const call = s.run(1, { B: { zone: "OVER", spinning: false } });
+    assert.equal(call?.result, "OVER_FINISH");
+    s.run(0.3, { hand: true, A: { spinning: true }, B: null }); // 撿陀螺，A 還在轉
+    assert.equal(s.engine.state, "ARMED");
+    assert.equal(s.engine.battleNo, 2);
+    s.run(0.5); // 手離開，兩顆旋轉
+    assert.equal(s.engine.state, "LIVE");
+  });
+
+  test("開局不要求每格都量到旋轉：發射瞬間模糊（null）可接受，但量到停止就重算", () => {
+    const s = make();
+    s.run(0.2, { hand: true, A: null, B: null });
+    s.run(0.2, { A: { spinning: null }, B: { spinning: true } });
+    s.run(0.2, { A: { spinning: true }, B: { spinning: null } });
+    assert.equal(s.engine.state, "LIVE", "兩顆都在盤內且各量到過一次旋轉");
+    const s2 = make();
+    s2.run(0.2, { hand: true, A: null, B: null });
+    s2.run(1, { A: { spinning: null }, B: { spinning: null } });
+    assert.equal(s2.engine.state, "ARMED", "從未量到旋轉不能開局");
+    const s3 = make();
+    s3.run(0.2, { hand: true, A: null, B: null });
+    s3.run(1, { A: { spinning: true }, B: { spinning: false } });
+    assert.equal(s3.engine.state, "ARMED", "一顆量到停止不能開局");
+  });
+
+  test("沒偵測到手也能備援開局：兩顆在盤內旋轉 0.6 秒", () => {
+    const s = make();
+    s.run(0.2, { A: null, B: null });
+    s.run(0.5);
+    assert.equal(s.engine.state, "IDLE");
+    s.run(0.15);
+    assert.equal(s.engine.state, "LIVE");
+    assert.equal(s.engine.events.at(-1)?.note, "auto_no_hand");
   });
 });
 
@@ -387,6 +423,22 @@ describe("復活、先後、平手、盤外", () => {
     close(call!.t_event, tEnter);
   });
 
+  test("手進盤時只存在一兩格的進區／疑似停止不算候選（剪接、閃爍防護）", () => {
+    const s = make(30);
+    s.launch();
+    s.run(1 / 30, { B: { zone: "OVER", spinning: true } });
+    let call = s.run(1 / 30, { hand: true, B: { zone: "OVER", spinning: true } });
+    assert.equal(call?.result, "NO_CALL");
+    assert.ok(call!.flags.includes("hand_before_call"));
+
+    const s2 = make(30);
+    s2.launch();
+    s2.run(4 / 30, { B: { zone: "OVER", spinning: true } }); // 0.13 秒 ≥ 0.1
+    call = s2.run(1 / 30, { hand: true, B: { zone: "OVER", spinning: true } });
+    assert.equal(call?.result, "OVER_FINISH");
+    assert.ok(call!.flags.includes("hand_early"));
+  });
+
   test("手偵測到的那格起不再接受新的陀螺事件", () => {
     const s = make();
     s.launch();
@@ -505,10 +557,10 @@ describe("停轉確認只算有效觀測（實測誤判的根因）", () => {
     assert.equal(call, null);
   });
 
-  test("手提前進入時，疑似停止仍可作為候選（hand_early）", () => {
+  test("手提前進入時，疑似停止（≥ handEarlyMinCandidateSec）仍可作為候選（hand_early）", () => {
     const s = make(60);
     s.launch();
-    s.run(3 / 60, { B: { spinning: false } });
+    s.run(8 / 60, { B: { spinning: false } });
     const call = s.run(1 / 60, { hand: true, B: { spinning: false } });
     assert.equal(call?.result, "SPIN_FINISH");
     assert.ok(call!.flags.includes("hand_early"));
