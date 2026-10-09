@@ -215,12 +215,14 @@ describe("自轉訊號（運動補償）", () => {
     disc(b, 106, 98, 28, 0.7);
     const ga = toGray(a, W, H);
     const gb = toGray(b, W, H);
-    const m = measureSpin(ga, gb, W, H, 100, 100, 106, 98, 28, 30, cfg);
+    const m = measureSpin(ga, gb, W, H, 100, 100, 106, 98, 28, 0.55, cfg);
     assert.ok(m.deltaDeg !== null);
     assert.ok(Math.abs(m.deltaDeg!) < 1.5, `delta=${m.deltaDeg}`);
     assert.equal(decideSpinning(m, true, cfg), null, "沒有長延遲資料 → 未知");
-    assert.equal(decideSpinning({ ...m, longDeltaDeg: 0.5 }, true, cfg), false, "長延遲也≈0 → 停止");
+    assert.equal(decideSpinning({ ...m, longDeltaDeg: 0.5 }, true, cfg), false, "長延遲也≈0、像素不變 → 停止");
     assert.equal(decideSpinning({ ...m, longDeltaDeg: 9 }, true, cfg), true, "單格≈0 但隔 8 格轉了 9° → 混疊中的旋轉");
+    assert.equal(decideSpinning({ ...m, diff: 30, longDeltaDeg: 0.5 }, true, cfg), null, "角度≈0 但外觀仍在變 → 未知（30 fps 混疊的高速旋轉）");
+    assert.equal(decideSpinning({ ...m, diff: 2.0, noiseFloor: 1.7, longDeltaDeg: 0.5 }, true, cfg), false, "變化量只到雜訊底 → 停止");
   });
 
   test("反轉時符號翻轉", () => {
@@ -245,7 +247,10 @@ describe("自轉訊號（運動補償）", () => {
     assert.equal(decideSpinning({ deltaDeg: 4.5, peak: 0.9, diff: 20 }, true, cfg), true, "遲滯區維持");
     assert.equal(decideSpinning({ deltaDeg: 4.5, peak: 0.9, diff: 20, longDeltaDeg: 12 }, false, cfg), true, "遲滯區但長延遲明顯在轉");
     assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 20 }, true, cfg), null, "單格停止但無長延遲 → 未知");
-    assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 20, longDeltaDeg: 1 }, true, cfg), false);
+    assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 0.3, longDeltaDeg: 1 }, true, cfg), false);
+    assert.equal(decideSpinning({ deltaDeg: 2, peak: 0.9, diff: 20, longDeltaDeg: 1 }, true, cfg), null, "角度≈0 但像素變化大 → 未知");
+    assert.equal(decideSpinning({ deltaDeg: 4.5, peak: 0.9, diff: 20 }, false, cfg), null, "遲滯區：前一格是停止但外觀在變 → 不沿用停止");
+    assert.equal(decideSpinning({ deltaDeg: 0.5, peak: 0.2, diff: 5, speed: 6 }, false, cfg), true, "量不到角度但每秒平移 6 個半徑 → 旋轉中");
   });
 });
 
@@ -339,7 +344,10 @@ describe("整條管線", () => {
     for (let i = 0; i < 8; i++) r = run(80, 120, 0.3);
     A = r.obs.beys.find((b) => b.id === "A")!;
     assert.equal(A.spinning, false);
-    r = run(82, 121, 0.3); // 停住但滾動
+    r = run(82, 121, 0.3); // 停住但滾動：外觀在變（邊緣平移）→ 未知，等它停定再累計停止
+    A = r.obs.beys.find((b) => b.id === "A")!;
+    assert.equal(A.spinning, null);
+    for (let i = 0; i < 3; i++) r = run(82, 121, 0.3); // 停定
     A = r.obs.beys.find((b) => b.id === "A")!;
     assert.equal(A.spinning, false);
     r = run(222, 120, 0.3); // 整顆進右口袋
@@ -352,6 +360,66 @@ describe("整條管線", () => {
     const B = r.obs.beys.find((b) => b.id === "B")!;
     assert.equal(B.visible, false);
     assert.equal(B.zone, "IN");
+  });
+
+  test("30 fps 混疊：角度讀數≈0 但花紋每格在閃動的高速陀螺，不得判停", () => {
+    const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
+    const flicker = (img: Uint8ClampedArray, cx: number, cy: number, f: number) => {
+      // 固定相位的紋理（混疊成每格轉整數圈）＋ 每格交替亮起的扇區（模糊帶）
+      disc(img, cx, cy, R, 0.3, [220, 80, 80]);
+      const a0 = f % 2 === 0 ? 0 : Math.PI;
+      for (let y = Math.floor(cy - R); y <= Math.ceil(cy + R); y++) {
+        for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++) {
+          const dx = x - cx;
+          const dy = y - cy;
+          if (dx * dx + dy * dy > R * R) continue;
+          const a = (Math.atan2(dy, dx) - a0 + Math.PI * 4) % (Math.PI * 2);
+          if (a > Math.PI / 3) continue;
+          const i = (y * W + x) * 4;
+          img[i] = Math.min(255, img[i] + 14);
+          img[i + 1] = Math.min(255, img[i + 1] + 14);
+          img[i + 2] = Math.min(255, img[i + 2] + 14);
+        }
+      }
+    };
+    let falseFrames = 0;
+    for (let f = 0; f < 14; f++) {
+      const img = blank();
+      flicker(img, 80, 120, f);
+      disc(img, 160, 120, R, f * 0.3, [80, 120, 240]);
+      const r = vp.process(img, f / 30);
+      const A = r.obs.beys.find((b) => b.id === "A")!;
+      if (A.spinning === false) falseFrames++;
+    }
+    assert.equal(falseFrames, 0, "外觀每格在變，角度≈0 也只能是未知");
+  });
+
+  test("無花紋的陀螺在盤面快速平移：量不到角度也視為旋轉中", () => {
+    const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
+    const plain = (img: Uint8ClampedArray, cx: number, cy: number) => {
+      for (let y = Math.floor(cy - R); y <= Math.ceil(cy + R); y++) {
+        for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++) {
+          const dx = x - cx;
+          const dy = y - cy;
+          if (dx * dx + dy * dy > R * R) continue;
+          const i = (y * W + x) * 4;
+          const n = noise();
+          img[i] = 230 + n;
+          img[i + 1] = 230 + n;
+          img[i + 2] = 230 + n;
+        }
+      }
+    };
+    let last;
+    for (let f = 0; f < 6; f++) {
+      const img = blank();
+      plain(img, 60 + f * 6, 120); // 每格 6 px、半徑 18 → 每秒 10 個半徑
+      disc(img, 170, 120, R, f * 0.3, [80, 120, 240]);
+      last = vp.process(img, f / 30);
+    }
+    const A = last!.obs.beys.find((b) => b.id === "A")!;
+    assert.equal(A.spinning, true);
+    assert.ok((last!.debug.tracks.A!.spin!.speed ?? 0) > 2.5);
   });
 
   test("混疊：三重對稱紋理每格轉 119°，單格像 −1° 但長延遲看得出在轉，不得判停", () => {

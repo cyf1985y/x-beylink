@@ -24,6 +24,22 @@ export interface SpinConfig {
   spinOffDeg: number;
   /** 互相關峰值的正規化分數低於此值視為量不到 */
   minPeak: number;
+  /**
+   * 平移速度（每秒幾個陀螺半徑）達此值一律視為旋轉：仍在盤面上快速移動的陀螺不可能已停轉。
+   * 無花紋／低對比的陀螺（白色陀螺在白盤上）極座標比對常讀到 0°，這是主要防線；
+   * 停轉後的滾動通常低於此速度。
+   */
+  movingRadiusPerSec: number;
+  /** 平移速度的量測窗（秒） */
+  speedWindowSec: number;
+  /**
+   * 「靜止」的像素變化上限（灰階，扣掉畫面雜訊底後）：遮罩內前後格平均絕對差超過此值，
+   * 陀螺外觀仍在變化，不可判為停止（最多判為未知）。30 fps 高速旋轉＋對稱花紋會混疊成
+   * 角度≈0，但像素仍每格在變；真正停下的陀螺變化量等於雜訊底。
+   */
+  stillDiffMax: number;
+  /** 整張畫面前後格平均絕對差低於此值視為重複格（沒有新資訊） */
+  frameDupMax: number;
   /** 簡單差值訊號高於此值一律視為旋轉（高速模糊，極座標法混疊） */
   diffHigh: number;
   /**
@@ -50,6 +66,10 @@ export const DEFAULT_SPIN_CONFIG: SpinConfig = {
   spinOnDeg: 6,
   spinOffDeg: 3,
   minPeak: 0.35,
+  movingRadiusPerSec: 2.5,
+  speedWindowSec: 0.2,
+  stillDiffMax: 0.6,
+  frameDupMax: 0.05,
   diffHigh: 60,
   longLagFrames: 8,
   longLagSec: 0.27,
@@ -68,6 +88,12 @@ export interface SpinMeasure {
   longDeltaDeg?: number | null;
   /** 長延遲實際用的格數 */
   longLag?: number;
+  /** 平移速度（陀螺半徑／秒），由位置歷史求得；量不到為 null */
+  speed?: number | null;
+  /** 本格畫面的雜訊底：背景（非前景）像素的前後格平均絕對差 */
+  noiseFloor?: number;
+  /** 整張畫面（含前景）的前後格平均絕對差；接近 0 代表重複格 */
+  frameDiff?: number;
 }
 
 /** 極座標展開：回傳 radii × angles 的浮點陣列，每圈已減去平均值 */
@@ -194,28 +220,34 @@ export function measureSpin(
  */
 export function decideSpinning(m: SpinMeasure, prev: boolean | null, cfg: SpinConfig): boolean | null {
   if (m.diff >= cfg.diffHigh) return true; // 高速模糊：一定在轉
-  if (isDuplicateFrame(m)) return null; // 前後格相同（重複格）：沒有新資訊，不是停止
+  if (isDuplicateFrame(m, cfg)) return null; // 前後格相同（重複格）：沒有新資訊，不是停止
+  if (m.speed !== null && m.speed !== undefined && m.speed >= cfg.movingRadiusPerSec) return true; // 還在快速平移：一定在轉
   if (m.deltaDeg === null) return null; // 量不到
   const mag = Math.abs(m.deltaDeg);
   if (mag >= cfg.spinOnDeg) return true;
   const long = m.longDeltaDeg;
+  // 外觀仍在變化（扣掉雜訊底）就不可能已停：角度讀數≈0 只能是未知
+  const still = m.diff - (m.noiseFloor ?? 0) <= cfg.stillDiffMax;
   if (mag <= cfg.spinOffDeg) {
-    // 單格看起來停了：還要長延遲也≈0 才算停止（破解混疊）；沒有長延遲資料＝未知
+    // 單格看起來停了：還要長延遲也≈0、且像素幾乎不變才算停止（破解混疊）；沒有長延遲資料＝未知
     if (long === null || long === undefined) return null;
     const lmag = Math.abs(long);
-    if (lmag <= cfg.longStopDeg) return false;
+    if (lmag <= cfg.longStopDeg) return still ? false : null;
     if (lmag >= cfg.spinOnDeg) return true;
     return null;
   }
   // 遲滯區：維持前一格；但長延遲明顯在轉就直接判旋轉
   if (long !== null && long !== undefined && Math.abs(long) >= cfg.spinOnDeg) return true;
-  return prev;
+  return prev === false && !still ? null : prev;
 }
 
 /**
  * 前後兩格完全相同：遮罩內平均絕對差為 0 且互相關峰值 ≈ 1。
  * 真實相機有感光雜訊，差值不會是 0；這是串流重複格或取格重複的特徵。
  */
-export function isDuplicateFrame(m: SpinMeasure): boolean {
+export function isDuplicateFrame(m: SpinMeasure, cfg: SpinConfig = DEFAULT_SPIN_CONFIG): boolean {
+  // 重複格是「整張畫面」沒變（螢幕錄影補格、相機掉格）；只看單顆陀螺會把壓縮影片裡
+  // 靜止的陀螺（H.264 跳過區塊，前後格逐位元相同）當成重複格，永遠判不出轉停
+  if (m.frameDiff !== undefined) return m.frameDiff < cfg.frameDupMax;
   return m.diff < 0.5 && m.peak > 0.995;
 }

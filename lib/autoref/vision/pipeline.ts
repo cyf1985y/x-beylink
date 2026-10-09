@@ -140,6 +140,10 @@ export class VisionProcessor {
   private frameNo = 0;
   private lastT: number | null = null;
   private lastDt = 1 / 30;
+  /** 本格雜訊底：背景像素的前後格平均絕對差（靜止判定的基準） */
+  private noiseFloor = 0;
+  /** 本格整張畫面的前後格平均絕對差（重複格判定） */
+  private frameDiff = 0;
   private readonly mask: Uint8Array;
   private readonly tmpA: Uint8Array;
   private readonly tmpB: Uint8Array;
@@ -202,6 +206,26 @@ export class VisionProcessor {
 
   get beyArea(): number {
     return this.calib.beyArea;
+  }
+
+  /** 雜訊底：非前景像素（每 4 格取樣）的前後格平均絕對差；光線閃爍、壓縮雜訊都會反映在這裡 */
+  private measureNoiseFloor(prevGray: Uint8Array): void {
+    let bg = 0;
+    let nBg = 0;
+    let all = 0;
+    let nAll = 0;
+    const g = this.gray;
+    const m = this.mask;
+    for (let i = 0; i < g.length; i += 4) {
+      const d = Math.abs(g[i] - prevGray[i]);
+      all += d;
+      nAll++;
+      if (m[i]) continue;
+      bg += d;
+      nBg++;
+    }
+    this.noiseFloor = nBg === 0 ? 0 : bg / nBg;
+    this.frameDiff = nAll === 0 ? 0 : all / nAll;
   }
 
   /** 前景分割＋形態學，結果在 this.mask */
@@ -393,6 +417,11 @@ export class VisionProcessor {
     this.lastT = t;
     const lagFromSec = c.spin.longLagSec > 0 ? Math.round(c.spin.longLagSec / this.lastDt) : c.spin.longLagFrames;
     const L = Math.min(Math.max(2, lagFromSec), H - 1);
+    if (prevGray) this.measureNoiseFloor(prevGray);
+    else {
+      this.noiseFloor = 0;
+      this.frameDiff = 0;
+    }
     const beys: BeyObs[] = [];
     let anyMerged = false;
     for (const id of ["A", "B"] as BeyId[]) {
@@ -437,6 +466,20 @@ export class VisionProcessor {
             break;
           }
         }
+        // 平移速度：與 speedWindowSec 之前（最多 K 格）的位置相比；該格無效就縮短窗
+        spin.speed = null;
+        const K = Math.min(Math.max(1, Math.round(c.spin.speedWindowSec / this.lastDt)), H - 1);
+        for (const lag of [K, Math.floor(K / 2), 1]) {
+          if (lag < 1) continue;
+          const slotK = this.frameNo - lag;
+          if (slotK < 0 || !this.posValid[id][slotK % H]) continue;
+          const dx = b.cx - this.posHist[id][(slotK % H) * 2];
+          const dy = b.cy - this.posHist[id][(slotK % H) * 2 + 1];
+          spin.speed = Math.hypot(dx, dy) / (lag * this.lastDt) / Math.max(1, radius);
+          break;
+        }
+        spin.noiseFloor = this.noiseFloor;
+        spin.frameDiff = this.frameDiff;
         spinning = decideSpinning(spin, prev.spinning, c.spin);
       }
       let hist = prev?.hist ?? null;

@@ -83,6 +83,9 @@ const GROUPS: { title: string; fields: Field[] }[] = [
       { path: ["vision", "spin", "longLagSec"], label: "長延遲比對：隔幾秒再比一次（破解混疊；0 = 用格數）", step: 0.05 },
       { path: ["vision", "spin", "longLagFrames"], label: "長延遲比對：隔幾格（僅當秒數為 0）", step: 1 },
       { path: ["vision", "spin", "longStopDeg"], label: "長延遲角度差低於幾度才算停止", step: 0.5 },
+      { path: ["vision", "spin", "movingRadiusPerSec"], label: "平移速度達每秒幾個半徑一律視為旋轉", step: 0.5 },
+      { path: ["vision", "spin", "speedWindowSec"], label: "平移速度量測窗（秒）", step: 0.05 },
+      { path: ["vision", "spin", "stillDiffMax"], label: "靜止的像素變化上限（扣雜訊底，灰階）", step: 0.1 },
     ],
   },
   {

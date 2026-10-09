@@ -1,0 +1,48 @@
+{
+ "source": "beyblade_referee_test4（手機直拍，SHA-256 前 16 碼 18f4cc952d315f27）",
+ "fps": 30,
+ "frames": 701,
+ "meanMs": 45.12,
+ "transitions": [
+  {
+   "t": 0,
+   "from": "IDLE",
+   "to": "ARMED"
+  },
+  {
+   "t": 2.533,
+   "from": "ARMED",
+   "to": "LIVE"
+  },
+  {
+   "t": 21.7,
+   "from": "LIVE",
+   "to": "CALLED"
+  }
+ ],
+ "calls": [
+  {
+   "battle": 1,
+   "result": "XTREME_FINISH",
+   "points": 3,
+   "winner": "P1",
+   "t_event": 20.066666666666666,
+   "t_called": 21.7,
+   "flags": [
+    "reverse_x3",
+    "confirm_vanished"
+   ],
+   "confidence": "medium",
+   "loser_bey": "B"
+  }
+ ],
+ "groundTruth": [
+  {
+   "battle": 1,
+   "result": "XTREME_FINISH",
+   "loser": "白色陀螺（B）",
+   "tEventApprox": 20.0,
+   "note": "白陀螺約 20.0 秒衝上斜坡進極限區口袋，紅陀螺（A）持續旋轉至片尾"
+  }
+ ]
+}
