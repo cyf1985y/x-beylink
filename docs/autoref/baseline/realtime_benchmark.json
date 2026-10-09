@@ -1,0 +1,56 @@
+{
+  "cpu": "Intel(R) Core(TM) i5-9400 CPU @ 2.90GHz",
+  "logicalCores": 6,
+  "node": "v24.14.0",
+  "source_range": [
+    45,
+    75
+  ],
+  "fps_input": 60,
+  "resolution": [
+    480,
+    480
+  ],
+  "frames": 1800,
+  "warmup_frames_excluded": 120,
+  "core_all": {
+    "n": 1800,
+    "mean": 12.02068644444446,
+    "p50": 11.91229999999996,
+    "p95": 13.480599999999868,
+    "p99": 15.626099999997678,
+    "max": 47.19810000000143,
+    "over16_67ms": 0.006666666666666667,
+    "over33_33ms": 0.0011111111111111111
+  },
+  "core_steady": {
+    "n": 1680,
+    "mean": 12.045393452380969,
+    "p50": 11.94919999999911,
+    "p95": 13.480599999999868,
+    "p99": 15.212100000000646,
+    "max": 47.19810000000143,
+    "over16_67ms": 0.005952380952380952,
+    "over33_33ms": 0.0005952380952380953
+  },
+  "vision_and_rules_steady": {
+    "n": 1680,
+    "mean": 12.055429464285673,
+    "p50": 11.955599999997503,
+    "p95": 13.491299999999683,
+    "p99": 15.22019999999975,
+    "max": 47.20679999999993,
+    "over16_67ms": 0.005952380952380952,
+    "over33_33ms": 0.0005952380952380953
+  },
+  "offline_decode_and_inference": {
+    "wall_sec": 23.492240000000002,
+    "throughput_fps": 76.62104592835762,
+    "source_duration_sec": 30
+  },
+  "limitations": [
+    "Desktop Node and FFmpeg throughput only; no camera, browser canvas capture, Worker round trip, UI, recording or mobile thermal test.",
+    "No per-frame JSON output during benchmark; 120 warmup frames excluded from steady statistics.",
+    "Offline throughput does not measure capture-to-decision latency or variable-frame input accuracy."
+  ]
+}

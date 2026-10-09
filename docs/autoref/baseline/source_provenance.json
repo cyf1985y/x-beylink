@@ -1,0 +1,90 @@
+{
+  "head_revision": "258b4739f341584c11fae6f37cd8452225bdcf0a",
+  "video_url": "https://www.youtube.com/watch?v=oXBdn4yQYog",
+  "video_sha256": "c82097e4e7b4ae48601a09c39f8c52f74c553795fac62670f58a1290c8611ad8",
+  "video": {
+    "width": 720,
+    "height": 720,
+    "fps": 60,
+    "duration_sec": 1612.033333
+  },
+  "source_integrity": [
+    {
+      "path": "components/autoref/Battle.tsx",
+      "git_blob_sha": "6ba8628959fea59ab95f433ed4d9b56093f4e728"
+    },
+    {
+      "path": "components/autoref/Calibrate.tsx",
+      "git_blob_sha": "a6ba794bf24cd3643ef2dcedd3d5f244142bddf3"
+    },
+    {
+      "path": "lib/autoref/client.ts",
+      "git_blob_sha": "a5557e2617df384a02fe10c1962db7b919f793c4"
+    },
+    {
+      "path": "lib/autoref/match.ts",
+      "git_blob_sha": "3275732c82a995f96dd2622c9abb6af9bf3b7569"
+    },
+    {
+      "path": "lib/autoref/rules.test.ts",
+      "git_blob_sha": "13c7e72e0cdf65d1fcb215197768fa3f0402b9c2"
+    },
+    {
+      "path": "lib/autoref/rules.ts",
+      "git_blob_sha": "469976702b03f801d5be02b2af8f0d1412cb0cdc"
+    },
+    {
+      "path": "lib/autoref/settings.ts",
+      "git_blob_sha": "e213191f3cff1a0960ad39b076ff1b8e7d9f0e46"
+    },
+    {
+      "path": "lib/autoref/storage.ts",
+      "git_blob_sha": "3ad886ebdc12c216707ea56b965a0bce28154d8e"
+    },
+    {
+      "path": "lib/autoref/types.ts",
+      "git_blob_sha": "06ac1e7ffee8995c31094df6d00d4c03706b397d"
+    },
+    {
+      "path": "lib/autoref/vision/calibration.ts",
+      "git_blob_sha": "d7dbdadd351a9d1f7fcc273bb4f10b60a08dae25"
+    },
+    {
+      "path": "lib/autoref/vision/config.ts",
+      "git_blob_sha": "de30f4ce3f0effd00929c467f936051aadc27488"
+    },
+    {
+      "path": "lib/autoref/vision/image.ts",
+      "git_blob_sha": "d5c1ed6f2491c84b3bcd7572154f0841cdf00306"
+    },
+    {
+      "path": "lib/autoref/vision/pipeline.ts",
+      "git_blob_sha": "2872b2ce2421f2b593864e018b95eefaa01b5431"
+    },
+    {
+      "path": "lib/autoref/vision/spin.ts",
+      "git_blob_sha": "c475713682dd8b217cfa474e99e15696c71d464b"
+    },
+    {
+      "path": "lib/autoref/vision/vision.test.ts",
+      "git_blob_sha": "3c5c767152d2d26beec30ac9d667f117fc4e39aa"
+    },
+    {
+      "path": "lib/autoref/vision/worker.ts",
+      "git_blob_sha": "59c375551c2f65d66605d0af0398b4e5bc6066c7"
+    },
+    {
+      "path": "lib/autoref/vision/zones.ts",
+      "git_blob_sha": "79b2dc12e28cf6ca8345628009e4a6859e860ddb"
+    },
+    {
+      "path": "package.json",
+      "git_blob_sha": "2819f8ec8963771abd57e7a404b7a5f16e065e11"
+    }
+  ],
+  "existing_tests": {
+    "passed": 49,
+    "failed": 0,
+    "command": "node --test --test-isolation=none work/source/lib/autoref/rules.test.ts work/source/lib/autoref/vision/vision.test.ts"
+  }
+}

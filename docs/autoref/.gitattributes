@@ -1,0 +1,10 @@
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.mjs text eol=lf
+*.py text eol=lf
+*.html text eol=lf
+*.gz -text
+*.png -text
+*.jpg -text
+*.mp4 -text

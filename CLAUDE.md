@@ -42,6 +42,7 @@ npm run dev        # 本地開發
 npm run build      # 建置（CI 會跑）
 npm run lint       # ESLint
 npx tsc --noEmit   # 型別檢查
+npm test           # 自動裁判單元測試（node --test，Node 22 原生 TS，不需額外套件）
 ```
 
 ## 目前狀態
@@ -54,4 +55,19 @@ npx tsc --noEmit   # 型別檢查
   - M4 `/host/new` 開賽表單（等級受 tier_allowed 限制）、結算發獎盃＋缺席記點、`/player/[id]` 選手卡
   - M5 LINE 推播（`lib/push.ts`，成團/流局/遞補/獎盃/賽前提醒）、`/admin` 平台管理（ADMIN_LINE_USER_IDS）、`/terms`
 - 資料庫存取：自訂 LINE 登入（非 Supabase Auth），所有讀寫皆走伺服器端 service role client（`lib/supabase.ts`），擁有權檢查在程式碼層執行；RLS 已開啟擋 anon 直連
-- 下一步：Phase 2（抽籤制、自動組隊、對戰表／計分板、成就徽章、分享海報）
+- 自動裁判雛形（`/autoref`，規格見 Claude 文件《戰鬥陀螺 X 自動裁判 — 開發規格》）：
+  - 手機架在戰鬥盤上方，相機畫面全部在本機運算（Web Worker，純 TypeScript 影像處理，不用 OpenCV.js、不上傳影像）
+  - `lib/autoref/rules.ts` 規則引擎：純狀態機（IDLE→ARMED→LIVE→CALLED），不碰 DOM／相機；`rules.test.ts` 以規格 5.1 的 12 局當測試案例
+  - `lib/autoref/vision/`：背景相減→形態學→連通元件→區域重疊比例→追蹤（黏合分開用色彩直方圖）→運動補償自轉訊號（極座標互相關）；`vision.test.ts` 用合成影像驗證
+  - 頁面：校正（拍背景、紅框自動框對戰區、拖曳極限／出界區、量陀螺面積）、對戰（疊圖、比分、判定卡：確認／改判／重賽不計分、手動爆裂／開始這一局）、回放（每局影片逐格、事件時間軸、匯出）、設定（所有門檻可調、除錯模式）
+  - 儲存：IndexedDB（`lib/autoref/storage.ts`），不需後端；PWA：`public/autoref/manifest.webmanifest`＋`public/autoref-sw.js`
+  - `lib/autoref` 內部 import 一律帶 `.ts` 副檔名（tsconfig `allowImportingTsExtensions`），讓 Node 測試與 Next 都能解析
+  - 影片實測（`docs/autoref/`，Codex 以 YouTube 對戰影片離線重播，含逐格 trace 與重跑工具）找出三類誤判並已修正：
+    1. 手部只累計落在區域圖內的像素（盤外字幕／器材不算手，否則整片卡在 ARMED）
+    2. 停轉確認只累計「有效的停止觀測」：看不到、黏合、量不到、重複格都不算，中斷超過 `spinStopMaxGapFrames` 格歸零；影像管線沒有新量測時回報 null，不沿用舊狀態
+    3. 長延遲比對（`spin.longLagFrames`）：單格角度≈0 還要隔 L 格的角度也≈0 才算停止，破解高速時紋理對稱造成的混疊
+  - `docs/autoref/baseline/traces` 的觀測序列已是 `rules.test.ts` 的回歸測試；重跑影片需本機有原始 MP4（雲端容器抓不到 YouTube），Node 22 要加 `--experimental-strip-types`
+  - 第二批（`docs/autoref/clips/test3`，`tools/run_clip.ts`）帶出的流程修正：判定後手進來即進下一局 ARMED、開局窗容忍量不到的格、無手備援開局、手提前進入的候選最短存在時間、盤外陀螺尺寸物件不算陀螺、長延遲以秒計
+  - 第三批（`docs/autoref/clips/test4`，手機側拍 30 fps 單局）：30 fps 混疊讓全速陀螺角度差≈0，新增「停止」的兩道閘門——像素變化扣雜訊底須 ≤ `spin.stillDiffMax`、平移速度 ≥ `spin.movingRadiusPerSec` 一律視為旋轉；重複格改看整張畫面（`frameDupMax`）。結果：開局與 XTREME_FINISH 判定正確、無誤判
+  - 尚未在真機實測；規格 7.2 待作者確認的事項（平手門檻、提前伸手處置、盤型、賽制）預設值見 `lib/autoref/types.ts`
+- 下一步：Phase 2（抽籤制、自動組隊、對戰表／計分板、成就徽章、分享海報）；自動裁判假日實地驗收（規格 7.1）

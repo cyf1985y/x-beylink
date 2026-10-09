@@ -1,0 +1,260 @@
+{
+  "frames": 240,
+  "hand": 0,
+  "shaken": 0,
+  "twoVisible": 136,
+  "twoSpinning": 19,
+  "fgSum": 4.322829861111108,
+  "msSum": 3000.8420999999985,
+  "stateCounts": {
+    "IDLE": 30,
+    "LIVE": 22,
+    "CALLED": 188
+  },
+  "calls": [
+    {
+      "battle": 1,
+      "result": "SPIN_FINISH",
+      "points": 1,
+      "winner": "P2",
+      "t_event": 610.7,
+      "t_called": 610.8666666666667,
+      "flags": [
+        "confirm_spin"
+      ],
+      "confidence": "high",
+      "loser_bey": "A",
+      "tracks": {
+        "A": {
+          "cx": 81.32485497545738,
+          "cy": 182.0959393128068,
+          "radius": 26.708284387767684,
+          "visible": true,
+          "missing": 0,
+          "merged": false,
+          "zone": "IN",
+          "spinning": false,
+          "spin": {
+            "deltaDeg": -0.14403776408558083,
+            "peak": 0.970890358602776,
+            "diff": 5.575635876840696
+          },
+          "zoneRatio": {
+            "in": 0.9919678714859438,
+            "xtreme": 0,
+            "over": 0
+          }
+        },
+        "B": {
+          "cx": 412.7669213973799,
+          "cy": 179.06550218340612,
+          "radius": 24.148368712786887,
+          "visible": true,
+          "missing": 0,
+          "merged": false,
+          "zone": "IN",
+          "spinning": true,
+          "spin": {
+            "deltaDeg": null,
+            "peak": 0.25845466334815825,
+            "diff": 37.25163755458515
+          },
+          "zoneRatio": {
+            "in": 0.9268558951965066,
+            "xtreme": 0,
+            "over": 0
+          }
+        }
+      },
+      "obs": {
+        "t": 610.8666666666667,
+        "hand": false,
+        "beys": [
+          {
+            "id": "A",
+            "visible": true,
+            "zone": "IN",
+            "spinning": false,
+            "x": 81.32485497545738,
+            "y": 182.0959393128068
+          },
+          {
+            "id": "B",
+            "visible": true,
+            "zone": "IN",
+            "spinning": true,
+            "x": 412.7669213973799,
+            "y": 179.06550218340612
+          }
+        ]
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "t": 610.5,
+      "from": "IDLE",
+      "to": "LIVE"
+    },
+    {
+      "t": 610.8666666666667,
+      "from": "LIVE",
+      "to": "CALLED"
+    }
+  ],
+  "job": {
+    "id": "shark_no_graphics_diagnostic",
+    "start": 610,
+    "end": 614,
+    "fps": 60,
+    "background": "work/calibration/shark.rgba",
+    "beyArea": 1698,
+    "zones": {
+      "in": [
+        {
+          "x": 60,
+          "y": 157
+        },
+        {
+          "x": 160,
+          "y": 90
+        },
+        {
+          "x": 320,
+          "y": 90
+        },
+        {
+          "x": 427,
+          "y": 155
+        },
+        {
+          "x": 454,
+          "y": 244
+        },
+        {
+          "x": 415,
+          "y": 316
+        },
+        {
+          "x": 368,
+          "y": 365
+        },
+        {
+          "x": 112,
+          "y": 365
+        },
+        {
+          "x": 70,
+          "y": 325
+        },
+        {
+          "x": 25,
+          "y": 241
+        }
+      ],
+      "xtreme": [
+        {
+          "x": 114,
+          "y": 350
+        },
+        {
+          "x": 364,
+          "y": 350
+        },
+        {
+          "x": 400,
+          "y": 440
+        },
+        {
+          "x": 80,
+          "y": 440
+        }
+      ],
+      "over": [
+        [
+          {
+            "x": 0,
+            "y": 285
+          },
+          {
+            "x": 72,
+            "y": 300
+          },
+          {
+            "x": 108,
+            "y": 354
+          },
+          {
+            "x": 96,
+            "y": 432
+          },
+          {
+            "x": 0,
+            "y": 432
+          }
+        ],
+        [
+          {
+            "x": 408,
+            "y": 300
+          },
+          {
+            "x": 480,
+            "y": 285
+          },
+          {
+            "x": 480,
+            "y": 432
+          },
+          {
+            "x": 384,
+            "y": 432
+          },
+          {
+            "x": 372,
+            "y": 354
+          }
+        ]
+      ]
+    },
+    "manualStart": 610.5,
+    "ignoreBands": [
+      [
+        0,
+        75
+      ],
+      [
+        388,
+        480
+      ]
+    ],
+    "saveFrames": [
+      610.5,
+      611,
+      612
+    ]
+  },
+  "config": {
+    "fgThreshold": 45,
+    "openKernel": 5,
+    "closeKernel": 9,
+    "beyMinRatio": 0.4,
+    "beyMaxRatio": 1.75,
+    "mergedMaxRatio": 2.5,
+    "handBlobRatio": 2.5,
+    "handInsideRatio": 5,
+    "maxAspect": 1.9,
+    "zoneInsideRatio": 0.85,
+    "shakeRatio": 0.4,
+    "mergeDistanceScale": 1.6,
+    "spin": {
+      "angles": 72,
+      "radii": 10,
+      "radiusScale": 0.85,
+      "spinOnDeg": 6,
+      "spinOffDeg": 3,
+      "minPeak": 0.35,
+      "diffHigh": 60
+    }
+  }
+}
