@@ -66,6 +66,7 @@ export default async function HomePage() {
     { href: "/records", icon: "🏆", label: "生涯戰績", desc: "獎盃與出席紀錄" },
     { href: "/registrations", icon: "🎟️", label: "已報名賽事", desc: "報名狀態與憑證" },
     { href: "#events", icon: "🏟️", label: "近期賽事", desc: "找比賽、揪團開打" },
+    { href: "/autoref", icon: "📷", label: "自動裁判", desc: "手機架在盤上方，自動判定與計分", wide: true },
   ];
 
   return (
