@@ -21,6 +21,7 @@ import {
   toStored,
   type ZonePolygons,
 } from "@/lib/autoref/vision/calibration";
+import { pointInPolygon } from "@/lib/autoref/vision/image";
 import type { Point, Rect } from "@/lib/autoref/vision/image";
 import { drawZones, ZONE_COLOR } from "./overlay";
 import { useAutorefData } from "./useAutoref";
@@ -73,7 +74,8 @@ export function Calibrate() {
   const [beyAt, setBeyAt] = useState<{ cx: number; cy: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dragRef = useRef<{ key: PolyKey; idx: number } | null>(null);
+  /** idx >= 0：拖頂點；idx = -1：按住框內整個搬移（start 為按下點、orig 為按下時的多邊形） */
+  const dragRef = useRef<{ key: PolyKey; idx: number; start?: Point; orig?: Point[] } | null>(null);
 
   const longSide = settings?.processLongSide ?? 480;
 
@@ -236,6 +238,16 @@ export function Calibrate() {
     if (best) {
       dragRef.current = best;
       e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+    // 沒按到頂點：按在框內就整個搬移（極限區／口袋優先於對戰區）
+    for (const key of keys) {
+      const poly = polyOf(key)!;
+      if (pointInPolygon(p, poly)) {
+        dragRef.current = { key, idx: -1, start: p, orig: poly.map((v) => ({ ...v })) };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
     }
   };
 
@@ -252,7 +264,20 @@ export function Calibrate() {
       if (!z) return z;
       const copy: ZonePolygons = { in: z.in.slice(), xtreme: z.xtreme.slice(), over: z.over.map((o) => o.slice()) };
       const poly = d.key === "in" ? copy.in : d.key === "xtreme" ? copy.xtreme : copy.over[d.key === "over0" ? 0 : 1];
-      poly[d.idx] = np;
+      if (d.idx >= 0) {
+        poly[d.idx] = np;
+      } else if (d.start && d.orig) {
+        // 整個搬移：位移量以按下點為基準，並限制不超出畫面
+        let dx = p.x - d.start.x;
+        let dy = p.y - d.start.y;
+        const xs = d.orig.map((v) => v.x);
+        const ys = d.orig.map((v) => v.y);
+        dx = Math.max(-Math.min(...xs), Math.min(canvas.width - 1 - Math.max(...xs), dx));
+        dy = Math.max(-Math.min(...ys), Math.min(canvas.height - 1 - Math.max(...ys), dy));
+        d.orig.forEach((v, i) => {
+          poly[i] = { x: v.x + dx, y: v.y + dy };
+        });
+      }
       return copy;
     });
   };
@@ -407,7 +432,7 @@ export function Calibrate() {
       {step === 2 && (
         <div className="space-y-2">
           <p className="text-sm text-slate-300">
-            青色是對戰區（紅框內緣）。拖曳頂點修正到貼合紅框內側。
+            青色是對戰區（盤內可打的區域）。拖曳圓點改形狀、按住框內可整個搬移，修正到貼合盤內緣。
           </p>
           <div className="flex gap-2">
             <button type="button" className="flex-1 rounded-xl border border-arena-line px-4 py-3 font-bold" onClick={() => setStep(1)}>
@@ -423,7 +448,7 @@ export function Calibrate() {
       {step === 3 && (
         <div className="space-y-2">
           <p className="text-sm text-slate-300">
-            金色是極限區（下方），紅色是兩個出界區（左右口袋）。拖曳頂點對齊實際的口袋，口袋要延伸到畫面邊緣，陀螺掉進去出鏡才算出界。
+            金色是極限區（3 分洞，預設在上方），紅色是兩個出界區（2 分洞，預設左上、右上）。按住框內整個搬到實際的洞口，再拖圓點微調；極限區要連斜坡一起蓋，口袋要延伸到盤壁外，陀螺掉進去看不到也算。
           </p>
           <div className="flex gap-2">
             <button type="button" className="rounded-xl border border-arena-line px-4 py-3 font-bold" onClick={() => setStep(2)}>
