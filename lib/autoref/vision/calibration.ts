@@ -59,38 +59,41 @@ export function buildZoneMap(zones: ZonePolygons, w: number, h: number): Uint8Ar
 }
 
 /**
- * 標準 Xtreme Stadium 的預設範本：極限區在下方，出界區在左右兩側口袋。
- * 依對戰區凸包的外接矩形推出，使用者可再拖曳修正。
+ * 標準 Xtreme Stadium 的預設範本：極限區（3 分洞）在上方中央，兩個出界區（2 分洞）在左上與右上。
+ * 這是實地架設時最常見的朝向（手機從選手對面上方俯拍）。依對戰區凸包的外接矩形推出，
+ * 使用者可再拖曳修正：拖頂點改形狀、按住框內整個搬移。
  */
 export function presetZones(inHull: Point[], w: number, h: number): ZonePolygons {
   const b = polygonBounds(inHull);
   const cx = b.x + b.w / 2;
   const margin = Math.max(8, b.w * 0.04);
-  // 極限區：底部中央，寬約 55%、高約 22%，從紅框內緣延伸到紅框外
-  const xw = b.w * 0.55;
-  const xtop = b.y + b.h * 0.8;
+  const top = Math.max(0, b.y - margin * 3);
+  const left = Math.max(0, b.x - margin * 3);
+  const right = Math.min(w - 1, b.x + b.w + margin * 3);
+  // 極限區：頂部中央，寬約 45%，從對戰區外緣往內蓋到約 22% 高（含斜坡）
+  const xw = b.w * 0.45;
   const xtreme: Point[] = [
-    { x: cx - xw / 2, y: xtop },
-    { x: cx + xw / 2, y: xtop },
-    { x: cx + xw / 2 + margin, y: Math.min(h - 1, b.y + b.h + margin * 3) },
-    { x: cx - xw / 2 - margin, y: Math.min(h - 1, b.y + b.h + margin * 3) },
+    { x: cx - xw / 2 - margin, y: top },
+    { x: cx + xw / 2 + margin, y: top },
+    { x: cx + xw / 2, y: b.y + b.h * 0.22 },
+    { x: cx - xw / 2, y: b.y + b.h * 0.22 },
   ];
-  // 出界區：左右中段的口袋，從紅框內緣延伸到畫面邊緣
-  const ph = b.h * 0.3;
-  const py0 = b.y + b.h * 0.3;
-  const left: Point[] = [
-    { x: Math.max(0, b.x - margin * 3), y: py0 - margin },
-    { x: b.x + b.w * 0.14, y: py0 },
-    { x: b.x + b.w * 0.14, y: py0 + ph },
-    { x: Math.max(0, b.x - margin * 3), y: py0 + ph + margin },
+  // 出界區：左上與右上的口袋，從對戰區內緣延伸到畫面邊緣
+  const py0 = b.y + b.h * 0.08;
+  const py1 = b.y + b.h * 0.42;
+  const leftPocket: Point[] = [
+    { x: left, y: py0 - margin },
+    { x: b.x + b.w * 0.28, y: py0 },
+    { x: b.x + b.w * 0.2, y: py1 },
+    { x: left, y: py1 + margin },
   ];
-  const right: Point[] = [
-    { x: b.x + b.w * 0.86, y: py0 },
-    { x: Math.min(w - 1, b.x + b.w + margin * 3), y: py0 - margin },
-    { x: Math.min(w - 1, b.x + b.w + margin * 3), y: py0 + ph + margin },
-    { x: b.x + b.w * 0.86, y: py0 + ph },
+  const rightPocket: Point[] = [
+    { x: b.x + b.w * 0.72, y: py0 },
+    { x: right, y: py0 - margin },
+    { x: right, y: py1 + margin },
+    { x: b.x + b.w * 0.8, y: py1 },
   ];
-  return { in: inHull, xtreme, over: [left, right] };
+  return { in: inHull, xtreme, over: [leftPocket, rightPocket] };
 }
 
 /** 沒有紅框可偵測時的備援：以畫面中央的八邊形當對戰區 */

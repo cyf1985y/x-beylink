@@ -474,7 +474,7 @@ describe("整條管線", () => {
     const img = blank();
     disc(img, 80, 120, R, 0);
     disc(img, 160, 120, R, 0);
-    rect(img, 0, 0, 240, 26, [180, 150, 120]); // 頂部標題條，完全在區域圖外
+    rect(img, 0, 214, 240, 26, [180, 150, 120]); // 底部字幕條，完全在區域圖外（範本的極限區與口袋都在上方）
     let r = vp.process(img, 0);
     assert.equal(r.obs.hand, false);
     const bar = r.debug.blobs.find((b) => b.cls === "hand");
