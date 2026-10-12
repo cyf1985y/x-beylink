@@ -62,6 +62,8 @@ export interface FrameDebug {
   tracks: Record<BeyId, BeyTrack | null>;
   /** 處理時間（毫秒） */
   ms: number;
+  /** 目前套用的曝光增益（1 = 無補償） */
+  gain: number;
 }
 
 export interface ProcessResult {
@@ -151,6 +153,10 @@ export class VisionProcessor {
   private readonly polarScratch: { a: Float32Array; b: Float32Array };
   tracks: Record<BeyId, BeyTrack | null> = { A: null, B: null };
   private prevMerged = false;
+  /** 背景的灰階（曝光補償用） */
+  private readonly bgGray: Uint8Array;
+  /** 曝光增益（非前景像素的亮度比，指數平滑） */
+  private gain = 1;
 
   constructor(calib: Calibration, config: VisionConfig = DEFAULT_VISION_CONFIG) {
     this.calib = calib;
@@ -160,6 +166,7 @@ export class VisionProcessor {
     const n = this.width * this.height;
     this.zoneMap = buildZoneMap(calib.zones, this.width, this.height);
     this.gray = new Uint8Array(n);
+    this.bgGray = toGray(calib.background, this.width, this.height);
     this.allocHistory();
     this.mask = new Uint8Array(n);
     this.tmpA = new Uint8Array(n);
@@ -232,12 +239,44 @@ export class VisionProcessor {
   private segment(rgba: Uint8ClampedArray): number {
     const { width: w, height: h } = this;
     const c = this.config;
-    foregroundMask(rgba, this.calib.background, w, h, c.fgThreshold, this.mask);
+    foregroundMask(rgba, this.calib.background, w, h, c.fgThreshold, this.mask, c.exposureCompensation ? this.gain : 1);
     let fg = 0;
     for (let i = 0; i < this.mask.length; i++) fg += this.mask[i];
     open(this.mask, w, h, c.openKernel, this.tmpA, this.tmpB);
     close(this.tmpB, w, h, c.closeKernel, this.tmpA, this.mask);
+    if (c.exposureCompensation) this.updateGain();
     return fg / this.mask.length;
+  }
+
+  /**
+   * 曝光補償：拿本格非前景像素的平均亮度除以背景同位置的平均亮度，當下一格的增益。
+   * 前景太多（剛開始整片都算前景）時仍用全部像素估，讓它能從飄移中收斂回來。
+   */
+  private updateGain() {
+    const g = this.gray;
+    const b = this.bgGray;
+    const m = this.mask;
+    let sc = 0;
+    let sb = 0;
+    let n = 0;
+    for (let i = 0; i < g.length; i += 4) {
+      if (m[i]) continue;
+      sc += g[i];
+      sb += b[i];
+      n++;
+    }
+    if (n < g.length / 40) {
+      sc = 0;
+      sb = 0;
+      for (let i = 0; i < g.length; i += 4) {
+        sc += g[i];
+        sb += b[i];
+      }
+    }
+    if (sb <= 0) return;
+    const max = this.config.exposureGainMax;
+    const ratio = Math.min(max, Math.max(1 / max, sc / sb));
+    this.gain = this.gain * 0.7 + ratio * 0.3;
   }
 
   private classify(blobs: Blob[]): ClassifiedBlob[] {
@@ -531,6 +570,7 @@ export class VisionProcessor {
         handArea,
         tracks: { A: this.tracks.A, B: this.tracks.B },
         ms: t1 - t0,
+        gain: this.gain,
       },
     };
   }
@@ -549,7 +589,8 @@ export function measureBeyArea(
   background: Uint8ClampedArray,
   w: number,
   h: number,
-  config: VisionConfig = DEFAULT_VISION_CONFIG
+  config: VisionConfig = DEFAULT_VISION_CONFIG,
+  maxArea = Infinity
 ): { area: number; cx: number; cy: number } | null {
   const mask = foregroundMask(rgba, background, w, h, config.fgThreshold);
   const tmp = new Uint8Array(w * h);
@@ -557,9 +598,10 @@ export function measureBeyArea(
   const cl = close(o, w, h, config.closeKernel, tmp);
   const labels = new Int32Array(w * h);
   const blobs = connectedComponents(cl, w, h, labels, 50);
+  // 超過 maxArea 的不是陀螺（燈光／曝光改變讓整片盤面變前景時，最大的那塊就是盤面）
   const round = blobs.filter((b) => {
     const aspect = Math.max(b.bbox.w, b.bbox.h) / Math.max(1, Math.min(b.bbox.w, b.bbox.h));
-    return aspect <= config.maxAspect;
+    return aspect <= config.maxAspect && b.area <= maxArea;
   });
   if (round.length === 0) return null;
   round.sort((a, b) => b.area - a.area);

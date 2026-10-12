@@ -21,7 +21,7 @@ import {
   toStored,
   type ZonePolygons,
 } from "@/lib/autoref/vision/calibration";
-import { pointInPolygon } from "@/lib/autoref/vision/image";
+import { pointInPolygon, polygonBounds } from "@/lib/autoref/vision/image";
 import type { Point, Rect } from "@/lib/autoref/vision/image";
 import { drawZones, ZONE_COLOR } from "./overlay";
 import { useAutorefData } from "./useAutoref";
@@ -291,6 +291,43 @@ export function Calibrate() {
     setZones(presetZones(zones.in, size.width, size.height));
   };
 
+  /** 對戰區外接矩形的寬（處理解析度像素） */
+  const arenaWidth = zones ? Math.max(polygonBounds(zones.in).w, polygonBounds(zones.in).h, 1) : 0;
+  /** 陀螺直徑不可能超過盤寬的 30%；量到更大的是盤面（燈光／曝光改變） */
+  const maxBeyArea = Math.PI * Math.pow(arenaWidth * 0.15, 2);
+  /** 量不到時的預設：直徑約盤寬 10%（BX 陀螺約 5 cm、盤面約 45 cm） */
+  const defaultBeyArea = Math.round(Math.PI * Math.pow(arenaWidth * 0.05, 2));
+
+  /**
+   * 步驟 2 → 3：沒偵測到紅框時裁切範圍是整張畫面，盤面只佔一小塊、解析度浪費掉。
+   * 依使用者框好的對戰區重新裁切（外擴 25% 把口袋含進來），背景從原始快照重取，多邊形換算到新座標。
+   */
+  const goStep3 = () => {
+    const snap = fullCanvasRef.current;
+    if (!zones || !size || !crop || !full || !snap) {
+      setStep(3);
+      return;
+    }
+    const kx = crop.w / size.width;
+    const ky = crop.h / size.height;
+    const hullFull = zones.in.map((p) => ({ x: p.x * kx + crop.x, y: p.y * ky + crop.y }));
+    const c = cropAround(hullFull, full, 0.25);
+    if (c.w * c.h > crop.w * crop.h * 0.85) {
+      setStep(3);
+      return;
+    }
+    const s = processSize(c, longSide);
+    const nx = s.width / c.w;
+    const ny = s.height / c.h;
+    const hullProc = hullFull.map((p) => ({ x: (p.x - c.x) * nx, y: (p.y - c.y) * ny }));
+    setCrop(c);
+    setSize(s);
+    setBackground(grabFrom(snap, c));
+    setZones(presetZones(hullProc, s.width, s.height));
+    setDetectNote("已依對戰區重新裁切畫面，盤面放大處理；極限區與口袋已重設，請搬到實際位置");
+    setStep(3);
+  };
+
   // 步驟 4：量測陀螺面積（即時畫面）
   useEffect(() => {
     if (step !== 4 || !crop || !size) return;
@@ -311,15 +348,26 @@ export function Calibrate() {
     const client = clientRef.current;
     if (!video || !g || !client || !background || !settings) return;
     const img = g.grab(video);
-    const r = await client.measureBey(img, background.data, settings.vision);
+    const r = await client.measureBey(img, background.data, settings.vision, maxBeyArea);
     if (!r) {
       setBeyArea(null);
-      setDetectNote("沒有偵測到陀螺，請確認陀螺放在盤內且光線與拍背景時相同");
+      setBeyAt(null);
+      setDetectNote(
+        `沒有偵測到合理大小的陀螺（直徑應小於 ${Math.round(arenaWidth * 0.3)} 像素）。常見原因：手還在畫面內、燈光或曝光與拍背景時不同讓整個盤面變成前景。請把燈打亮固定、手離開再量一次，或直接按「用預設大小」。`
+      );
       return;
     }
+    const d = Math.round(2 * Math.sqrt(r.area / Math.PI));
     setBeyArea(Math.round(r.area));
     setBeyAt({ cx: r.cx, cy: r.cy });
-    setDetectNote(`量到陀螺面積 ${Math.round(r.area)} 像素（直徑約 ${Math.round(2 * Math.sqrt(r.area / Math.PI))} 像素）`);
+    setDetectNote(`量到陀螺面積 ${Math.round(r.area)} 像素（直徑約 ${d} 像素，盤寬的 ${Math.round((d / arenaWidth) * 100)}%）`);
+  };
+
+  const useDefaultBeyArea = () => {
+    if (!defaultBeyArea) return;
+    setBeyArea(defaultBeyArea);
+    setBeyAt(null);
+    setDetectNote(`使用預設陀螺面積 ${defaultBeyArea} 像素（直徑約盤寬 10%）；之後可在設定頁微調門檻`);
   };
 
   const save = async () => {
@@ -438,7 +486,7 @@ export function Calibrate() {
             <button type="button" className="flex-1 rounded-xl border border-arena-line px-4 py-3 font-bold" onClick={() => setStep(1)}>
               重拍背景
             </button>
-            <button type="button" className="btn-x flex-1" onClick={() => setStep(3)}>
+            <button type="button" className="btn-x flex-1" onClick={goStep3}>
               下一步
             </button>
           </div>
@@ -475,6 +523,9 @@ export function Calibrate() {
             </button>
             <button type="button" className="rounded-xl border border-cyanx/60 px-4 py-3 font-bold text-cyanx" onClick={measure}>
               量測
+            </button>
+            <button type="button" className="rounded-xl border border-arena-line px-3 py-3 text-sm font-bold" onClick={useDefaultBeyArea}>
+              用預設大小
             </button>
             <button type="button" className="btn-x flex-1" onClick={save} disabled={!beyArea || saving}>
               {saving ? "儲存中…" : "儲存校正"}

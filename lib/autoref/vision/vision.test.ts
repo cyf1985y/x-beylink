@@ -306,6 +306,40 @@ describe("整條管線", () => {
     assert.ok(m && Math.abs(m.area - beyArea) / beyArea < 0.15, `area=${m?.area}`);
   });
 
+  test("量測陀螺面積：整片盤面變成前景時不會被當成陀螺（maxArea）", () => {
+    const img = blank();
+    rect(img, 40, 40, 160, 160, [120, 120, 120]); // 燈光改變：一大塊方形前景
+    disc(img, 120, 120, R, 0, [220, 80, 80]);
+    const any = measureBeyArea(img, blank(), W, H);
+    assert.ok(any && any.area > 10000, "沒有上限時抓到的是整塊盤面");
+    const capped = measureBeyArea(img, blank(), W, H, DEFAULT_VISION_CONFIG, 5000);
+    assert.equal(capped, null, "有上限且盤面與陀螺黏在一起 → 量不到，由使用者改用預設大小");
+  });
+
+  test("曝光補償：整張畫面一起變亮，幾格後前景比例回到正常且兩顆仍偵測得到", () => {
+    const bright = (k: number) => {
+      const img = blank(100, 100, 100);
+      disc(img, 80, 120, R, 0.2, [220, 80, 80]);
+      disc(img, 160, 120, R, 0.6, [80, 120, 240]);
+      for (let i = 0; i < W * H * 4; i += 4) {
+        img[i] = Math.min(255, img[i] * k);
+        img[i + 1] = Math.min(255, img[i + 1] * k);
+        img[i + 2] = Math.min(255, img[i + 2] * k);
+      }
+      return img;
+    };
+    const bg = blank(100, 100, 100);
+    const vpOff = new VisionProcessor({ ...calib(), background: bg }, { ...DEFAULT_VISION_CONFIG, exposureCompensation: false });
+    const off = vpOff.process(bright(1.6), 0);
+    assert.ok(off.debug.fgRatio > 0.5, `不補償：整張都是前景 fg=${off.debug.fgRatio}`);
+    const vp = new VisionProcessor({ ...calib(), background: bg }, DEFAULT_VISION_CONFIG);
+    let last = vp.process(bright(1.6), 0);
+    for (let f = 1; f < 8; f++) last = vp.process(bright(1.6), f / 30);
+    assert.ok(last.debug.gain > 1.4 && last.debug.gain < 1.8, `gain=${last.debug.gain}`);
+    assert.ok(last.debug.fgRatio < 0.1, `補償後前景比例 fg=${last.debug.fgRatio}`);
+    assert.equal(last.obs.beys.filter((b) => b.visible).length, 2);
+  });
+
   test("兩顆陀螺：左 A 右 B，都在對戰區，旋轉中", () => {
     const vp = new VisionProcessor(calib(), DEFAULT_VISION_CONFIG);
     let last;

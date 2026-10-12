@@ -46,14 +46,17 @@ export function foregroundMask(
   w: number,
   h: number,
   threshold: number,
-  out?: Uint8Array
+  out?: Uint8Array,
+  gain = 1
 ): Uint8Array {
   const n = w * h;
   const m = out ?? new Uint8Array(n);
+  // gain：曝光補償，背景乘上增益再比（相機自動曝光飄移時整張畫面會一起變亮／變暗）
+  const g = gain === 1 ? null : new Uint8Array(256).map((_, v) => Math.min(255, Math.round(v * gain)));
   for (let i = 0, j = 0; i < n; i++, j += 4) {
-    const dr = Math.abs(rgba[j] - bg[j]);
-    const dg = Math.abs(rgba[j + 1] - bg[j + 1]);
-    const db = Math.abs(rgba[j + 2] - bg[j + 2]);
+    const dr = Math.abs(rgba[j] - (g ? g[bg[j]] : bg[j]));
+    const dg = Math.abs(rgba[j + 1] - (g ? g[bg[j + 1]] : bg[j + 1]));
+    const db = Math.abs(rgba[j + 2] - (g ? g[bg[j + 2]] : bg[j + 2]));
     const d = dr > dg ? (dr > db ? dr : db) : dg > db ? dg : db;
     m[i] = d > threshold ? 1 : 0;
   }
