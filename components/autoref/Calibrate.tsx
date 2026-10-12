@@ -2,7 +2,7 @@
 
 /**
  * 校正頁（規格 6.2）：拍空盤背景 → 自動框出對戰區（可手動修正）→ 標極限區與兩個出界區
- * → 放一顆靜止的陀螺量測面積 → 儲存。
+ * → 陀螺大小預設依盤寬反推（直徑約盤寬 10%），可放一顆靜止的陀螺量測微調 → 儲存。
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -293,10 +293,13 @@ export function Calibrate() {
 
   /** 對戰區外接矩形的寬（處理解析度像素） */
   const arenaWidth = zones ? Math.max(polygonBounds(zones.in).w, polygonBounds(zones.in).h, 1) : 0;
-  /** 陀螺直徑不可能超過盤寬的 30%；量到更大的是盤面（燈光／曝光改變） */
-  const maxBeyArea = Math.PI * Math.pow(arenaWidth * 0.15, 2);
-  /** 量不到時的預設：直徑約盤寬 10%（BX 陀螺約 5 cm、盤面約 45 cm） */
+  /**
+   * 陀螺大小預設依盤寬反推：BX 陀螺約 5 cm、Xtreme 盤面約 45 cm，直徑約盤寬 10%，鏡頭多高都成立，
+   * 不受燈光／曝光影響。量測只是微調，量到的直徑在盤寬 6%–16% 以外就不採用。
+   */
   const defaultBeyArea = Math.round(Math.PI * Math.pow(arenaWidth * 0.05, 2));
+  const minBeyArea = Math.PI * Math.pow(arenaWidth * 0.03, 2);
+  const maxBeyArea = Math.PI * Math.pow(arenaWidth * 0.08, 2);
 
   /**
    * 步驟 2 → 3：沒偵測到紅框時裁切範圍是整張畫面，盤面只佔一小塊、解析度浪費掉。
@@ -328,6 +331,14 @@ export function Calibrate() {
     setStep(3);
   };
 
+  // 進入步驟 4：先套用比例反推的陀螺大小，之後量測成功才覆蓋
+  useEffect(() => {
+    if (step !== 4 || !defaultBeyArea) return;
+    setBeyArea((cur) => cur ?? defaultBeyArea);
+    setBeyAt(null);
+    setDetectNote(`已依盤寬反推陀螺面積 ${defaultBeyArea} 像素（直徑約盤寬 10%），可直接儲存`);
+  }, [step, defaultBeyArea]);
+
   // 步驟 4：量測陀螺面積（即時畫面）
   useEffect(() => {
     if (step !== 4 || !crop || !size) return;
@@ -349,25 +360,25 @@ export function Calibrate() {
     if (!video || !g || !client || !background || !settings) return;
     const img = g.grab(video);
     const r = await client.measureBey(img, background.data, settings.vision, maxBeyArea);
-    if (!r) {
-      setBeyArea(null);
+    if (!r || r.area < minBeyArea) {
+      setBeyArea(defaultBeyArea);
       setBeyAt(null);
       setDetectNote(
-        `沒有偵測到合理大小的陀螺（直徑應小於 ${Math.round(arenaWidth * 0.3)} 像素）。常見原因：手還在畫面內、燈光或曝光與拍背景時不同讓整個盤面變成前景。請把燈打亮固定、手離開再量一次，或直接按「用預設大小」。`
+        `量不到合理大小的陀螺（直徑應在盤寬 6%–16% 之間），維持比例反推值 ${defaultBeyArea} 像素。常見原因：手還在畫面內、燈光或曝光與拍背景時不同。直接儲存即可。`
       );
       return;
     }
     const d = Math.round(2 * Math.sqrt(r.area / Math.PI));
     setBeyArea(Math.round(r.area));
     setBeyAt({ cx: r.cx, cy: r.cy });
-    setDetectNote(`量到陀螺面積 ${Math.round(r.area)} 像素（直徑約 ${d} 像素，盤寬的 ${Math.round((d / arenaWidth) * 100)}%）`);
+    setDetectNote(`量到陀螺面積 ${Math.round(r.area)} 像素（直徑約 ${d} 像素，盤寬的 ${Math.round((d / arenaWidth) * 100)}%），已採用`);
   };
 
   const useDefaultBeyArea = () => {
     if (!defaultBeyArea) return;
     setBeyArea(defaultBeyArea);
     setBeyAt(null);
-    setDetectNote(`使用預設陀螺面積 ${defaultBeyArea} 像素（直徑約盤寬 10%）；之後可在設定頁微調門檻`);
+    setDetectNote(`改回比例反推的陀螺面積 ${defaultBeyArea} 像素（直徑約盤寬 10%）`);
   };
 
   const save = async () => {
@@ -515,7 +526,7 @@ export function Calibrate() {
       {step === 4 && (
         <div className="space-y-2">
           <p className="text-sm text-slate-300">
-            在對戰區內放一顆靜止的陀螺（不要有手在畫面內），按「量測」。所有面積門檻都以這個值為基準。
+            陀螺大小已依盤寬自動反推，可直接「儲存校正」。想更準可在對戰區放一顆靜止的陀螺（手離開畫面）按「量測」，量到的值合理才會採用。
           </p>
           <div className="flex gap-2">
             <button type="button" className="rounded-xl border border-arena-line px-4 py-3 font-bold" onClick={() => setStep(3)}>
@@ -524,9 +535,11 @@ export function Calibrate() {
             <button type="button" className="rounded-xl border border-cyanx/60 px-4 py-3 font-bold text-cyanx" onClick={measure}>
               量測
             </button>
-            <button type="button" className="rounded-xl border border-arena-line px-3 py-3 text-sm font-bold" onClick={useDefaultBeyArea}>
-              用預設大小
-            </button>
+            {beyAt && (
+              <button type="button" className="rounded-xl border border-arena-line px-3 py-3 text-sm font-bold" onClick={useDefaultBeyArea}>
+                改回反推值
+              </button>
+            )}
             <button type="button" className="btn-x flex-1" onClick={save} disabled={!beyArea || saving}>
               {saving ? "儲存中…" : "儲存校正"}
             </button>
