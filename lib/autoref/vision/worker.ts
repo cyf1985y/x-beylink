@@ -30,6 +30,7 @@ export interface FrameResult {
   debug: {
     fgRatio: number;
     shaken: boolean;
+    gain: number;
     blobs: ClassifiedBlob[];
     handArea: number;
     tracks: Record<BeyId, TrackInfo | null>;
@@ -54,6 +55,7 @@ export type WorkerRequest =
       width: number;
       height: number;
       config: VisionConfig;
+      maxArea?: number;
     };
 
 export type WorkerResponse =
@@ -118,6 +120,7 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
           debug: {
             fgRatio: r.debug.fgRatio,
             shaken: r.debug.shaken,
+            gain: r.debug.gain,
             blobs: r.debug.blobs,
             handArea: r.debug.handArea,
             tracks,
@@ -144,7 +147,7 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
         post({
           type: "measureBey",
           seq: msg.seq,
-          result: measureBeyArea(rgba, bg, msg.width, msg.height, msg.config),
+          result: measureBeyArea(rgba, bg, msg.width, msg.height, msg.config, msg.maxArea ?? Infinity),
         });
         break;
       }

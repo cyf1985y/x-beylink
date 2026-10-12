@@ -209,7 +209,8 @@ export class VisionClient {
   measureBey(
     img: ImageData,
     bg: Uint8ClampedArray,
-    config: VisionConfig
+    config: VisionConfig,
+    maxArea?: number
   ): Promise<{ area: number; cx: number; cy: number } | null> {
     return new Promise((resolve) => {
       const seq = ++this.seq;
@@ -217,7 +218,7 @@ export class VisionClient {
       const buf = img.data.buffer as ArrayBuffer;
       const bgBuf = bg.buffer.slice(0) as ArrayBuffer;
       this.send(
-        { type: "measureBey", seq, buf, bg: bgBuf, width: img.width, height: img.height, config },
+        { type: "measureBey", seq, buf, bg: bgBuf, width: img.width, height: img.height, config, maxArea },
         [buf, bgBuf]
       );
     });

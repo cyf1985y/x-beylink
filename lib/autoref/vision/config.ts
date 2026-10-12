@@ -31,6 +31,10 @@ export interface VisionConfig {
   shakeRatio: number;
   /** 黏合判定：前一格兩顆距離小於陀螺直徑的幾倍才允許視為黏合 */
   mergeDistanceScale: number;
+  /** 曝光補償：用非前景像素估整體亮度增益，背景乘上增益再相減（抵銷相機自動曝光飄移） */
+  exposureCompensation: boolean;
+  /** 曝光增益的上限（下限為其倒數） */
+  exposureGainMax: number;
   spin: SpinConfig;
 }
 
@@ -48,5 +52,7 @@ export const DEFAULT_VISION_CONFIG: VisionConfig = {
   beyInsideMinRatio: 0.5,
   shakeRatio: 0.4,
   mergeDistanceScale: 1.6,
+  exposureCompensation: true,
+  exposureGainMax: 1.8,
   spin: DEFAULT_SPIN_CONFIG,
 };
