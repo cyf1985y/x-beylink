@@ -207,7 +207,9 @@ export function Battle() {
         setEngineState(engine.state);
       }
       if (step.call) handleCall(step.call, engine.events.slice(), engine.liveAt);
-      setLiveSec(engine.state === "LIVE" && engine.liveAt !== null ? r.obs.t - engine.liveAt : null);
+      // 對戰秒數每 0.25 秒更新一次就夠；每格 setState 會讓整頁每格重繪，吃掉主執行緒
+      const live = engine.state === "LIVE" && engine.liveAt !== null ? Math.floor((r.obs.t - engine.liveAt) * 4) / 4 : null;
+      setLiveSec((prev) => (prev === live ? prev : live));
       setShaken(r.debug.shaken);
 
       // 疊圖
@@ -278,6 +280,11 @@ export function Battle() {
           const g = grabberRef.current;
           if (!g || cancelled) return;
           // mediaTime 偶爾不單調（rAF 退路），保險起見夾住
+          // Worker 已有一格在算、一格在排隊：這格一定會被丟，連取畫面都省下來
+          if (client.saturated) {
+            client.dropped += 1;
+            return;
+          }
           const t = mediaTime > lastTRef.current ? mediaTime : lastTRef.current + 1 / 60;
           lastTRef.current = t;
           const img = g.grab(video);

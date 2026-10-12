@@ -124,11 +124,15 @@ export class FrameGrabber {
   }
 }
 
-/** Worker 包裝：一次只處理一格，忙碌時丟棄新格並計數 */
+/**
+ * Worker 包裝：Worker 一次處理一格；忙碌時最多再排一格（最新的那格），讓主執行緒取畫面與
+ * Worker 運算重疊；排隊中又來新格就丟掉舊的並計數。
+ */
 export class VisionClient {
   private worker: Worker;
   private seq = 0;
   private busy = false;
+  private queued: { buf: ArrayBuffer; t: number; wantMask: boolean } | null = null;
   private pending = new Map<number, (r: WorkerResponse) => void>();
   dropped = 0;
   onFrame: ((r: FrameResult) => void) | null = null;
@@ -140,11 +144,13 @@ export class VisionClient {
       const msg = ev.data;
       if (msg.type === "frame") {
         this.busy = false;
+        this.flushQueued();
         this.onFrame?.(msg);
         return;
       }
       if (msg.type === "error") {
         this.busy = false;
+        this.flushQueued();
         this.onError?.(msg.message);
         if (msg.seq !== undefined) this.pending.get(msg.seq)?.(msg);
         return;
@@ -185,16 +191,30 @@ export class VisionClient {
     this.send({ type: "resetTracks" });
   }
 
-  /** 丟一格；Worker 忙碌時回傳 false 並計入丟棄 */
+  /** Worker 忙碌且已有一格排隊：主執行緒連取畫面都可以省下來（取畫面在手機上很貴） */
+  get saturated(): boolean {
+    return this.busy && this.queued !== null;
+  }
+
+  /** 丟一格；Worker 忙碌時排進去（取代舊的排隊格並計入丟棄） */
   pushFrame(img: ImageData, t: number, wantMask: boolean): boolean {
+    const buf = img.data.buffer as ArrayBuffer;
     if (this.busy) {
-      this.dropped += 1;
+      if (this.queued) this.dropped += 1;
+      this.queued = { buf, t, wantMask };
       return false;
     }
     this.busy = true;
-    const buf = img.data.buffer as ArrayBuffer;
     this.send({ type: "frame", seq: ++this.seq, buf, t, wantMask }, [buf]);
     return true;
+  }
+
+  private flushQueued() {
+    const q = this.queued;
+    if (!q) return;
+    this.queued = null;
+    this.busy = true;
+    this.send({ type: "frame", seq: ++this.seq, buf: q.buf, t: q.t, wantMask: q.wantMask }, [q.buf]);
   }
 
   detectArena(img: ImageData): Promise<Point[] | null> {
